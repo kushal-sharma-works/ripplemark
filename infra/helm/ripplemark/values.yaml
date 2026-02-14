@@ -1,0 +1,17 @@
+global:
+  nameOverride: ripplemark
+
+topology-service:
+  enabled: true
+
+analysis-service:
+  enabled: true
+
+registry-service:
+  enabled: true
+
+auth-gateway:
+  enabled: true
+
+web-app:
+  enabled: true

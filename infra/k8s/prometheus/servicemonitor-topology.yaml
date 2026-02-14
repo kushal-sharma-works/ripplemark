@@ -1,0 +1,17 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: topology-service
+  namespace: ripplemark
+  labels:
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames: [ripplemark]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: topology-service
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

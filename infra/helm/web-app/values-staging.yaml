@@ -1,0 +1,14 @@
+replicaCount: 2
+image:
+  tag: staging
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+ingress:
+  host: app.staging.ripplemark.local
+config:
+  AUTH_GATEWAY_URL: https://auth.staging.ripplemark.local

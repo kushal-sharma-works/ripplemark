@@ -1,0 +1,18 @@
+dependencies:
+- name: topology-service
+  repository: file://../topology-service
+  version: 0.1.0
+- name: analysis-service
+  repository: file://../analysis-service
+  version: 0.1.0
+- name: registry-service
+  repository: file://../registry-service
+  version: 0.1.0
+- name: auth-gateway
+  repository: file://../auth-gateway
+  version: 0.1.0
+- name: web-app
+  repository: file://../web-app
+  version: 0.1.0
+digest: sha256:1799a49b960024ab8c2e478b26409f82c851dd27629d575c540cfa8c0e66a383
+generated: "2026-02-14T19:34:30.537936154Z"

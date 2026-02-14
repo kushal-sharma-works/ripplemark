@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: registry-service-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: ripplemark
+    env: dev
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kushal-sharma-works/ripplemark.git
+    targetRevision: feat/implementation-and-ehancements
+    path: infra/helm/registry-service
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ripplemark
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

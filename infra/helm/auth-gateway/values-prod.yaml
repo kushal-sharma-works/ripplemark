@@ -1,0 +1,17 @@
+replicaCount: 3
+image:
+  tag: prod
+resources:
+  requests:
+    cpu: 300m
+    memory: 512Mi
+  limits:
+    cpu: 1200m
+    memory: 2Gi
+autoscaling:
+  minReplicas: 3
+  maxReplicas: 12
+ingress:
+  host: auth.ripplemark.io
+config:
+  NODE_ENV: production

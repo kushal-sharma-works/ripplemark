@@ -1,0 +1,5 @@
+replicaCount: 3
+image: { tag: prod }
+autoscaling: { minReplicas: 3, maxReplicas: 10, targetCPUUtilizationPercentage: 70 }
+ingress: { host: analysis.ripplemark.io }
+config: { ENVIRONMENT: production }

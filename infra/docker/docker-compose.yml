@@ -1,0 +1,194 @@
+name: ripplemark-local
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [ripplemark]
+
+  mongodb:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE}
+    ports:
+      - "${MONGO_PORT}:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --eval 'db.adminCommand({ ping: 1 })' --quiet"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [ripplemark]
+
+  redis:
+    image: redis:7
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [ripplemark]
+
+  nats:
+    image: nats:2.10
+    command: ["-js"]
+    ports:
+      - "${NATS_PORT}:4222"
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "nats", "server", "check", "--server=nats://localhost:4222"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [ripplemark]
+
+  topology-service:
+    build:
+      context: ../../apps/topology-service
+    environment:
+      PORT: ${TOPOLOGY_PORT}
+      MONGODB_URI: mongodb://mongodb:27017/${MONGO_INITDB_DATABASE}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      NATS_URL: nats://nats:4222
+    ports:
+      - "${TOPOLOGY_PORT}:${TOPOLOGY_PORT}"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${TOPOLOGY_PORT}/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [ripplemark]
+
+  analysis-service:
+    build:
+      context: ../../apps/analysis-service
+    environment:
+      PORT: ${ANALYSIS_PORT}
+      TOPOLOGY_BASE_URL: http://topology-service:${TOPOLOGY_PORT}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      NATS_URL: nats://nats:4222
+    ports:
+      - "${ANALYSIS_PORT}:8000"
+    depends_on:
+      topology-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [ripplemark]
+
+  registry-service:
+    build:
+      context: ../../apps/registry-service
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      NATS_URL: nats://nats:4222
+    ports:
+      - "${REGISTRY_PORT}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [ripplemark]
+
+  auth-gateway:
+    build:
+      context: ../../apps/auth-gateway
+    environment:
+      PORT: ${AUTH_GATEWAY_PORT}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      TOPOLOGY_SERVICE_URL: http://topology-service:${TOPOLOGY_PORT}
+      ANALYSIS_SERVICE_URL: http://analysis-service:8000
+      REGISTRY_SERVICE_URL: http://registry-service:8000
+      NATS_URL: nats://nats:4222
+    ports:
+      - "${AUTH_GATEWAY_PORT}:${AUTH_GATEWAY_PORT}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      topology-service:
+        condition: service_healthy
+      analysis-service:
+        condition: service_healthy
+      registry-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:${AUTH_GATEWAY_PORT}/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [ripplemark]
+
+  web-app:
+    build:
+      context: ../../apps/web-app
+    environment:
+      AUTH_GATEWAY_URL: http://auth-gateway:${AUTH_GATEWAY_PORT}
+    ports:
+      - "${WEB_APP_PORT}:80"
+    depends_on:
+      auth-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [ripplemark]
+
+networks:
+  ripplemark:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  mongo_data:
+  redis_data:
+  nats_data:

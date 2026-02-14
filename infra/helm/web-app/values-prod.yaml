@@ -1,0 +1,17 @@
+replicaCount: 3
+image:
+  tag: prod
+resources:
+  requests:
+    cpu: 150m
+    memory: 256Mi
+  limits:
+    cpu: 800m
+    memory: 1Gi
+autoscaling:
+  minReplicas: 3
+  maxReplicas: 10
+ingress:
+  host: app.ripplemark.io
+config:
+  AUTH_GATEWAY_URL: https://auth.ripplemark.io

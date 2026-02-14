@@ -1,0 +1,15 @@
+topology-service:
+  image:
+    tag: sit
+analysis-service:
+  image:
+    tag: sit
+registry-service:
+  image:
+    tag: sit
+auth-gateway:
+  image:
+    tag: sit
+web-app:
+  image:
+    tag: sit

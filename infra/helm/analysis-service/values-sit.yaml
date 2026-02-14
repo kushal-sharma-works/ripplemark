@@ -1,0 +1,4 @@
+replicaCount: 2
+image: { tag: sit }
+ingress: { host: analysis.sit.ripplemark.local }
+config: { ENVIRONMENT: sit }

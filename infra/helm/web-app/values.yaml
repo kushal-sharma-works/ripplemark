@@ -1,0 +1,45 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/kushal-sharma-works/ripplemark-web-app
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  className: nginx
+  host: app.dev.ripplemark.local
+  path: /
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 300m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+config:
+  AUTH_GATEWAY_URL: http://auth-gateway:3000
+
+secret:
+  sealedSecretName: web-app-secrets
+
+probes:
+  livenessPath: /
+  readinessPath: /
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+  readOnlyRootFilesystem: true

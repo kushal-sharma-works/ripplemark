@@ -1,0 +1,15 @@
+topology-service:
+  image:
+    tag: staging
+analysis-service:
+  image:
+    tag: staging
+registry-service:
+  image:
+    tag: staging
+auth-gateway:
+  image:
+    tag: staging
+web-app:
+  image:
+    tag: staging

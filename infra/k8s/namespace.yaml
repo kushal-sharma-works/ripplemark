@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ripplemark
+  labels:
+    app.kubernetes.io/part-of: ripplemark
+    pod-security.kubernetes.io/enforce: restricted
