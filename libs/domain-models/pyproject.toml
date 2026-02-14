@@ -1,0 +1,10 @@
+[project]
+name = "ripplemark-domain-models"
+version = "0.1.0"
+description = "Shared Ripplemark domain models for Python services"
+requires-python = ">=3.12"
+dependencies = ["pydantic>=2.9.0"]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"

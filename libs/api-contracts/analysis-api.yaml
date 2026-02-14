@@ -1,0 +1,232 @@
+openapi: 3.1.0
+info:
+  title: Ripplemark Analysis API
+  version: 1.0.0
+  description: Impact analysis and simulation APIs.
+servers:
+  - url: https://api.ripplemark.local/analysis
+security:
+  - bearerAuth: []
+paths:
+  /analysis/impact:
+    post:
+      summary: Run impact analysis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeProposal'
+      responses:
+        '200':
+          description: Impact result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImpactResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /analysis/impact/async:
+    post:
+      summary: Queue impact analysis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangeProposal'
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  analysis_id: { type: string, example: a8d7f9f0 }
+                  status: { type: string, example: queued }
+                required: [analysis_id, status]
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /analysis/impact/results/{analysisId}:
+    get:
+      summary: Read queued analysis result
+      parameters:
+        - in: path
+          name: analysisId
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Analysis status/result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  analysis_id: { type: string }
+                  status: { type: string, enum: [pending, complete] }
+                  result:
+                    oneOf:
+                      - type: 'null'
+                      - $ref: '#/components/schemas/ImpactResult'
+                required: [analysis_id, status]
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /simulation/run:
+    post:
+      summary: Run what-if simulation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                service_name: { type: string, example: auth-gateway }
+                scenario: { type: string, example: latency_increase }
+              required: [service_name, scenario]
+      responses:
+        '200':
+          description: Simulation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  impacted:
+                    type: array
+                    items: { type: string }
+                  notes: { type: string, example: Read path degradation expected }
+                required: [impacted, notes]
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /health:
+    get:
+      security: []
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: Request validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples: { default: { value: { statusCode: 400, message: Invalid proposal } } }
+    Unauthorized:
+      description: Missing or invalid token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples: { default: { value: { statusCode: 401, message: Unauthorized } } }
+    Forbidden:
+      description: User lacks permission
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples: { default: { value: { statusCode: 403, message: Forbidden } } }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples: { default: { value: { statusCode: 404, message: Not Found } } }
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples: { default: { value: { statusCode: 500, message: Internal Server Error } } }
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        statusCode: { type: integer }
+        message: { type: string }
+      required: [statusCode, message]
+    ServiceNode:
+      type: object
+      properties:
+        id: { type: string, example: auth-gateway }
+        name: { type: string, example: auth-gateway }
+        type: { type: string, example: api }
+        teamId: { type: string, example: platform }
+        status: { type: string, enum: [healthy, degraded, down], example: healthy }
+        version: { type: string, example: 1.0.0 }
+      required: [id, name, type, teamId, status, version]
+    DependencyEdge:
+      type: object
+      properties:
+        source: { type: string, example: web-app }
+        target: { type: string, example: auth-gateway }
+        type: { type: string, enum: [sync, async], example: sync }
+      required: [source, target, type]
+    ChangeProposal:
+      type: object
+      properties:
+        serviceId: { type: string, example: auth-gateway }
+        changeType: { type: string, enum: [api, schema, infra, config], example: schema }
+        title: { type: string, example: Add required field to response }
+        description: { type: string, example: Add tenantId to login response }
+      required: [serviceId, changeType, title, description]
+    ImpactResult:
+      type: object
+      properties:
+        riskScore: { $ref: '#/components/schemas/RiskScore' }
+        affectedServices:
+          type: array
+          items:
+            type: object
+            properties:
+              service: { type: string, example: web-app }
+              reason: { type: string, example: Contract changed }
+            required: [service, reason]
+        recommendedActions:
+          type: array
+          items: { type: string, example: Coordinate rollout with UI team }
+      required: [riskScore, affectedServices, recommendedActions]
+    RiskScore:
+      type: integer
+      minimum: 0
+      maximum: 100
+      example: 73
+    Team:
+      type: object
+      properties:
+        id: { type: string, example: platform }
+        name: { type: string, example: Platform Team }
+      required: [id, name]
+    User:
+      type: object
+      properties:
+        id: { type: string, example: user-123 }
+        email: { type: string, format: email, example: user@ripplemark.io }
+        roles:
+          type: array
+          items: { type: string, example: team_lead }
+      required: [id, email, roles]
