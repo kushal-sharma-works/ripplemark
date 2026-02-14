@@ -1,0 +1,22 @@
+@import 'tailwindcss';
+@import 'primeicons/primeicons.css';
+
+:root {
+	--rm-radius: 0.75rem;
+	--rm-gap: 1rem;
+}
+
+html,
+body {
+	margin: 0;
+	min-height: 100%;
+	font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+.p-card {
+	border-radius: var(--rm-radius);
+}
