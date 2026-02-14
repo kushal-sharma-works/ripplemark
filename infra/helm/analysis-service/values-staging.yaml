@@ -1,0 +1,4 @@
+replicaCount: 2
+image: { tag: staging }
+ingress: { host: analysis.staging.ripplemark.local }
+config: { ENVIRONMENT: staging }

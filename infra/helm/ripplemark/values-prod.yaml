@@ -1,0 +1,15 @@
+topology-service:
+  image:
+    tag: prod
+analysis-service:
+  image:
+    tag: prod
+registry-service:
+  image:
+    tag: prod
+auth-gateway:
+  image:
+    tag: prod
+web-app:
+  image:
+    tag: prod

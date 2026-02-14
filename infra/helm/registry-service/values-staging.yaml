@@ -1,0 +1,14 @@
+replicaCount: 2
+image:
+  tag: staging
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: 800m
+    memory: 1Gi
+ingress:
+  host: registry.staging.ripplemark.local
+config:
+  DJANGO_ENV: staging

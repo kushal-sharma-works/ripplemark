@@ -1,0 +1,63 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: ripplemark-services
+  namespace: argocd
+spec:
+  goTemplate: true
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: https://github.com/kushal-sharma-works/ripplemark.git
+              revision: feat/implementation-and-ehancements
+              directories:
+                - path: infra/helm/*
+                - path: infra/helm/ripplemark
+                  exclude: true
+          - list:
+              elements:
+                - env: local
+                  valueFile: values.yaml
+                  autoSync: true
+                  prune: true
+                  selfHeal: true
+                - env: sit
+                  valueFile: values-sit.yaml
+                  autoSync: false
+                  prune: false
+                  selfHeal: false
+  template:
+    metadata:
+      name: '{{ .path.basename }}-{{ .env }}'
+      labels:
+        app.kubernetes.io/part-of: ripplemark
+        env: '{{ .env }}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/kushal-sharma-works/ripplemark.git
+        targetRevision: feat/implementation-and-ehancements
+        path: 'infra/helm/{{ .path.basename }}'
+        helm:
+          valueFiles:
+            - values.yaml
+            {{- if ne .valueFile "values.yaml" }}
+            - '{{ .valueFile }}'
+            {{- end }}
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: ripplemark
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+  templatePatch: |
+    {{- if .autoSync }}
+    spec:
+      syncPolicy:
+        automated:
+          prune: {{ .prune }}
+          selfHeal: {{ .selfHeal }}
+        syncOptions:
+          - CreateNamespace=true
+    {{- end }}

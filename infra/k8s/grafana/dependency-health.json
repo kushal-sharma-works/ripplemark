@@ -1,0 +1,42 @@
+{
+  "title": "Ripplemark Dependency Health",
+  "uid": "ripplemark-dependencies",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "PostgreSQL Up",
+      "targets": [
+        { "expr": "max(up{job=~\".*postgres.*\"})" }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "MongoDB Up",
+      "targets": [
+        { "expr": "max(up{job=~\".*mongo.*\"})" }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Redis Up",
+      "targets": [
+        { "expr": "max(up{job=~\".*redis.*\"})" }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "NATS Up",
+      "targets": [
+        { "expr": "max(up{job=~\".*nats.*\"})" }
+      ],
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 }
+    }
+  ]
+}
