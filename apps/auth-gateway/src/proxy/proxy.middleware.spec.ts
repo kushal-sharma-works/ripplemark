@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import { ProxyMiddleware } from './proxy.middleware';
 
 const proxyHandlers: Array<(req: any, res: any, next: any) => void> = [];
@@ -16,6 +17,7 @@ jest.mock('http-proxy-middleware', () => ({
 describe('ProxyMiddleware', () => {
   const config = {
     getOrThrow: (key: string) => {
+      if (key === 'JWT_SECRET') return 'test-secret';
       if (key === 'TOPOLOGY_SERVICE_URL') return 'http://topology';
       if (key === 'ANALYSIS_SERVICE_URL') return 'http://analysis';
       if (key === 'REGISTRY_SERVICE_URL') return 'http://registry';
@@ -28,33 +30,94 @@ describe('ProxyMiddleware', () => {
     proxyConfigs.length = 0;
   });
 
-  it('routes topology requests', () => {
+  const token = () => new JwtService({ secret: 'test-secret' }).sign({ sub: 'u1', roles: ['admin'], teams: ['t1'] });
+
+  it('routes topology requests', async () => {
     const middleware = new ProxyMiddleware(config);
-    const req = { path: '/api/topology/graph', user: { sub: 'u1', roles: ['admin'], teams: ['t1'] } };
+    const req = {
+      path: '/api/topology/graph',
+      headers: { authorization: `Bearer ${token()}` },
+    };
     const next = jest.fn();
 
-    middleware.use(req as any, {} as any, next);
+    await middleware.use(req as any, { status: jest.fn().mockReturnThis(), json: jest.fn() } as any, next);
     expect(proxyHandlers[0]).toHaveBeenCalled();
     expect(proxyHandlers[1]).not.toHaveBeenCalled();
     expect(proxyHandlers[2]).not.toHaveBeenCalled();
   });
 
-  it('routes analysis and registry requests', () => {
+  it('routes analysis and registry requests', async () => {
     const middleware = new ProxyMiddleware(config);
     const nextA = jest.fn();
-    middleware.use({ path: '/api/analysis/run' } as any, {} as any, nextA);
+    await middleware.use(
+      { path: '/api/analysis/run', headers: { authorization: `Bearer ${token()}` } } as any,
+      { status: jest.fn().mockReturnThis(), json: jest.fn() } as any,
+      nextA,
+    );
     expect(proxyHandlers[1]).toHaveBeenCalled();
 
     const nextR = jest.fn();
-    middleware.use({ path: '/api/registry/services' } as any, {} as any, nextR);
+    await middleware.use(
+      { path: '/api/registry/services', headers: { authorization: `Bearer ${token()}` } } as any,
+      { status: jest.fn().mockReturnThis(), json: jest.fn() } as any,
+      nextR,
+    );
     expect(proxyHandlers[2]).toHaveBeenCalled();
   });
 
-  it('calls next for unknown route', () => {
+  it('calls next for unknown route', async () => {
     const middleware = new ProxyMiddleware(config);
     const next = jest.fn();
-    middleware.use({ path: '/other' } as any, {} as any, next);
+    await middleware.use({ path: '/other', headers: {} } as any, {} as any, next);
     expect(next).toHaveBeenCalled();
+  });
+
+  it('returns 401 when missing bearer token on protected route', async () => {
+    const middleware = new ProxyMiddleware(config);
+    const status = jest.fn().mockReturnThis();
+    const json = jest.fn();
+
+    await middleware.use(
+      { path: '/api/registry/services', headers: {} } as any,
+      { status, json } as any,
+      jest.fn(),
+    );
+
+    expect(status).toHaveBeenCalledWith(401);
+    expect(json).toHaveBeenCalledWith({ message: 'Unauthorized' });
+    expect(proxyHandlers[2]).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 for topology route when token is missing', async () => {
+    const middleware = new ProxyMiddleware(config);
+    const status = jest.fn().mockReturnThis();
+    const json = jest.fn();
+
+    await middleware.use(
+      { path: '/api/topology/graph', headers: {} } as any,
+      { status, json } as any,
+      jest.fn(),
+    );
+
+    expect(status).toHaveBeenCalledWith(401);
+    expect(json).toHaveBeenCalledWith({ message: 'Unauthorized' });
+    expect(proxyHandlers[0]).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 when bearer token is invalid', async () => {
+    const middleware = new ProxyMiddleware(config);
+    const status = jest.fn().mockReturnThis();
+    const json = jest.fn();
+
+    await middleware.use(
+      { path: '/api/analysis/run', headers: { authorization: 'Bearer bad-token' } } as any,
+      { status, json } as any,
+      jest.fn(),
+    );
+
+    expect(status).toHaveBeenCalledWith(401);
+    expect(json).toHaveBeenCalledWith({ message: 'Unauthorized' });
+    expect(proxyHandlers[1]).not.toHaveBeenCalled();
   });
 
   it('adds identity headers to proxied requests', () => {
