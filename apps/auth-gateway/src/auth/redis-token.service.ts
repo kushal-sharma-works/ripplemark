@@ -22,4 +22,8 @@ export class RedisTokenService {
   async invalidateRefreshToken(userId: string, tokenId: string): Promise<void> {
     await this.redis.del(`refresh:${userId}:${tokenId}`);
   }
+
+  async ping(): Promise<string> {
+    return this.redis.ping();
+  }
 }

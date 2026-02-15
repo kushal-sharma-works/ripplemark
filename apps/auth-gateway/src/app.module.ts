@@ -1,14 +1,18 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TerminusModule } from '@nestjs/terminus';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerModule } from 'nestjs-pino';
+import { context, trace } from '@opentelemetry/api';
 import * as Joi from 'joi';
 import { AuthModule } from './auth/auth.module';
 import { AuthorizationModule } from './authorization/authorization.module';
 import { HealthController } from './infrastructure/health.controller';
+import { MetricsController } from './observability/metrics.controller';
+import { AuthMetricsService } from './observability/metrics.service';
+import { ProxyMetricsMiddleware } from './observability/proxy-metrics.middleware';
 import { ProxyModule } from './proxy/proxy.module';
 import { User } from './users/user.entity';
 import { UsersModule } from './users/users.module';
@@ -36,6 +40,15 @@ import { UsersModule } from './users/users.module';
           process.env.NODE_ENV === 'development'
             ? { target: 'pino-pretty', options: { colorize: true } }
             : undefined,
+        customProps: () => {
+          const span = trace.getSpan(context.active());
+          const spanContext = span?.spanContext();
+
+          return {
+            trace_id: spanContext?.traceId,
+            span_id: spanContext?.spanId,
+          };
+        },
       },
     }),
     ThrottlerModule.forRootAsync({
@@ -62,7 +75,15 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     ProxyModule,
   ],
-  controllers: [HealthController],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  controllers: [HealthController, MetricsController],
+  providers: [
+    AuthMetricsService,
+    ProxyMetricsMiddleware,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+  ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(ProxyMetricsMiddleware).forRoutes('*');
+  }
+}

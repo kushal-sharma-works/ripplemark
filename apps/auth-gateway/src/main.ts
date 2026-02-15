@@ -5,8 +5,11 @@ import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { startTracing } from './observability/tracing';
 
 async function bootstrap() {
+  await startTracing('auth-gateway');
+
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.useLogger(app.get(Logger));
 

@@ -4,8 +4,11 @@ import { ConfigService } from '@nestjs/config';
 import { Logger as PinoLogger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { setupSwagger } from './common/config/swagger.config';
+import { startTracing } from './observability/tracing';
 
 async function bootstrap() {
+  await startTracing('topology-service');
+
   const app = await NestFactory.create(AppModule, {
     bufferLogs: true,
   });
@@ -37,7 +40,7 @@ async function bootstrap() {
 
   // Global prefix
   app.setGlobalPrefix('api/v1', {
-    exclude: ['health', 'health/liveness', 'health/readiness'],
+    exclude: ['health', 'health/liveness', 'health/readiness', 'health/live', 'health/ready', 'metrics'],
   });
 
   // Setup Swagger documentation

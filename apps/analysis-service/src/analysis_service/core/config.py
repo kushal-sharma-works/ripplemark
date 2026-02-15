@@ -14,5 +14,8 @@ class Settings(BaseSettings):
     topology_backoff_min: float = 0.2
     topology_backoff_max: float = 2.0
 
+    redis_url: str = "redis://localhost:6379"
+    otel_exporter_otlp_endpoint: str | None = None
+
     circuit_breaker_fail_threshold: int = 5
     circuit_breaker_reset_seconds: int = 30

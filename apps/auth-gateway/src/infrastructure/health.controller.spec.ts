@@ -8,8 +8,11 @@ describe('HealthController', () => {
     const db = {
       pingCheck: jest.fn().mockResolvedValue({ postgres: { status: 'up' } }),
     } as any;
+    const redis = {
+      ping: jest.fn().mockResolvedValue('PONG'),
+    } as any;
 
-    const controller = new HealthController(health, db);
+    const controller = new HealthController(health, db, redis);
     const result = await controller.check();
 
     expect(health.check).toHaveBeenCalled();

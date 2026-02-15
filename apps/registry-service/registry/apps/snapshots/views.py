@@ -1,9 +1,11 @@
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+import time
 
 from apps.snapshots.models import DependencySnapshot
 from apps.snapshots.serializers import DependencySnapshotSerializer
+from registry.metrics import analysis_risk_score_histogram, simulation_duration_seconds
 
 
 class DependencySnapshotViewSet(viewsets.ModelViewSet):
@@ -13,6 +15,7 @@ class DependencySnapshotViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="compare")
     def compare_snapshots(self, request):
+        started = time.perf_counter()
         first_id = request.query_params.get("first")
         second_id = request.query_params.get("second")
         if not first_id or not second_id:
@@ -24,6 +27,13 @@ class DependencySnapshotViewSet(viewsets.ModelViewSet):
             return Response({"error": "snapshot not found"}, status=404)
 
         diff = self._diff_graphs(first.graph_data, second.graph_data)
+        delta_score = min(
+            100,
+            (len(diff["added_services"]) + len(diff["removed_services"]) + len(diff["added_edges"]) + len(diff["removed_edges"]))
+            * 10,
+        )
+        analysis_risk_score_histogram.observe(delta_score)
+        simulation_duration_seconds.observe(time.perf_counter() - started)
         return Response(diff)
 
     def _diff_graphs(self, first, second):

@@ -20,6 +20,8 @@ export class ProxyMiddleware implements NestMiddleware {
       'X-User-Id': req.user?.sub ?? '',
       'X-User-Roles': (req.user?.roles ?? []).join(','),
       'X-User-Teams': (req.user?.teams ?? []).join(','),
+      traceparent: String(req.headers['traceparent'] ?? ''),
+      tracestate: String(req.headers['tracestate'] ?? ''),
     });
 
     this.topologyProxy = createProxyMiddleware({
