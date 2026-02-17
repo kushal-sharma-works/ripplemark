@@ -8,11 +8,18 @@ dependencies = [
   "fastapi>=0.115",
   "uvicorn[standard]>=0.30",
   "httpx>=0.27",
+  "redis>=5.0",
   "tenacity>=8.3",
   "pydantic>=2.7",
   "pydantic-settings>=2.3",
   "structlog>=24.1",
   "networkx>=3.3",
+  "prometheus-client>=0.20",
+  "opentelemetry-api>=1.27",
+  "opentelemetry-sdk>=1.27",
+  "opentelemetry-exporter-otlp>=1.27",
+  "opentelemetry-instrumentation-fastapi>=0.48b0",
+  "opentelemetry-instrumentation-httpx>=0.48b0",
 ]
 
 [project.optional-dependencies]
@@ -48,3 +55,6 @@ show_missing = true
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/analysis_service"]

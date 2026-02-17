@@ -1,13 +1,14 @@
-export type ServiceType = 'api' | 'worker' | 'frontend' | 'database';
-export type DependencyType = 'sync' | 'async';
+export type ServiceType = 'sync' | 'async';
+export type DependencyType = 'http' | 'grpc' | 'event';
 
 export interface ServiceNode {
   id: string;
   name: string;
   type: ServiceType;
-  team: string;
-  status: 'healthy' | 'degraded' | 'down';
   version: string;
+  metadata?: Record<string, unknown>;
+  team?: string;
+  status?: 'healthy' | 'degraded' | 'down';
 }
 
 export interface DependencyEdge {
@@ -19,7 +20,6 @@ export interface DependencyEdge {
 export interface GraphSnapshot {
   nodes: ServiceNode[];
   edges: DependencyEdge[];
-  capturedAt: string;
 }
 
 export interface DashboardOverview {
@@ -30,16 +30,17 @@ export interface DashboardOverview {
 }
 
 export interface ChangeProposal {
-  serviceId: string;
-  changeType: 'schema' | 'api' | 'infra' | 'config';
-  title: string;
+  serviceName: string;
+  changeType: 'schema_change' | 'timeout_change' | 'retry_change' | 'deprecation' | 'version_bump';
+  title?: string;
   description: string;
+  maxDepth: number;
 }
 
 export interface ImpactResult {
   affectedServices: Array<{ service: string; score: number; reason: string }>;
   riskScore: number;
-  recommendedActions: string[];
+  backwardCompatibility: string;
 }
 
 export interface TeamSummary {

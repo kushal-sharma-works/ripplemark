@@ -1,4 +1,4 @@
-import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, input, viewChild } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, effect, input, viewChild } from '@angular/core';
 import * as d3 from 'd3';
 import { DependencyEdge, ServiceNode } from '../../core/services/models';
 
@@ -16,8 +16,26 @@ export class GraphCanvasComponent implements AfterViewInit {
   readonly edges = input<DependencyEdge[]>([]);
   readonly container = viewChild.required<ElementRef<HTMLDivElement>>('container');
 
+  private viewReady = false;
+
+  constructor() {
+    effect(() => {
+      const currentNodes = this.nodes();
+      const currentEdges = this.edges();
+      if (!this.viewReady) return;
+      this.render(currentNodes, currentEdges);
+    });
+  }
+
   ngAfterViewInit(): void {
+    this.viewReady = true;
+    this.render(this.nodes(), this.edges());
+  }
+
+  private render(nodes: ServiceNode[], edges: DependencyEdge[]): void {
     const host = this.container().nativeElement;
+    host.innerHTML = '';
+
     const width = host.clientWidth;
     const height = host.clientHeight;
 
@@ -25,8 +43,8 @@ export class GraphCanvasComponent implements AfterViewInit {
     const root = svg.append('g');
     svg.call(d3.zoom<SVGSVGElement, unknown>().on('zoom', (event) => root.attr('transform', event.transform as string)));
 
-    const graphNodes: GraphPoint[] = this.nodes().map((d) => ({ ...d }));
-    const graphLinks: GraphLink[] = this.edges().map((d) => ({ ...d }));
+    const graphNodes: GraphPoint[] = nodes.map((d) => ({ ...d }));
+    const graphLinks: GraphLink[] = edges.map((d) => ({ ...d }));
 
     const simulation = d3
       .forceSimulation<GraphPoint>(graphNodes)
@@ -41,7 +59,7 @@ export class GraphCanvasComponent implements AfterViewInit {
       .enter()
       .append('line')
       .attr('stroke', 'var(--surface-500)')
-      .attr('stroke-dasharray', (d: GraphLink) => (d.type === 'async' ? '4 4' : '0'));
+      .attr('stroke-dasharray', (d: GraphLink) => (d.type === 'event' ? '4 4' : '0'));
 
     const node = root
       .append('g')
@@ -50,7 +68,7 @@ export class GraphCanvasComponent implements AfterViewInit {
       .enter()
       .append('circle')
       .attr('r', 12)
-      .attr('fill', (d: GraphPoint) => (d.type === 'api' ? '#3b82f6' : d.type === 'frontend' ? '#8b5cf6' : '#10b981'));
+      .attr('fill', (d: GraphPoint) => (d.type === 'async' ? '#8b5cf6' : '#3b82f6'));
 
     simulation.on('tick', () => {
       const simNodes = simulation.nodes();

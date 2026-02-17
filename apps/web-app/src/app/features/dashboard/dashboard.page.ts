@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, linkedSignal, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { CardModule } from 'primeng/card';
+import { ApiService, PaginatedResponse } from '../../core/services/api.service';
 
 @Component({
   standalone: true,
@@ -28,12 +30,14 @@ import { CardModule } from 'primeng/card';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class DashboardPage {
-  readonly totalServices = signal(42);
-  readonly totalDependencies = signal(136);
-  readonly recentChanges = signal(8);
-  readonly systemHealth = signal<'healthy' | 'degraded' | 'down'>('healthy');
+  private readonly api = inject(ApiService);
 
-  readonly healthSummary = linkedSignal(() => this.systemHealth());
+  readonly totalServices = signal(0);
+  readonly totalDependencies = signal(0);
+  readonly recentChanges = signal(0);
+  readonly systemHealth = signal<'healthy' | 'degraded' | 'down'>('degraded');
+
+  readonly healthSummary = computed(() => this.systemHealth());
 
   readonly cards = computed(() => [
     { label: 'Total Services', value: this.totalServices() },
@@ -41,4 +45,35 @@ export class DashboardPage {
     { label: 'Recent Changes', value: this.recentChanges() },
     { label: 'System Health', value: this.systemHealth() },
   ]);
+
+  constructor() {
+    void this.loadOverview();
+  }
+
+  private async loadOverview(): Promise<void> {
+    try {
+      const stats = await firstValueFrom(
+        this.api.get<{ success: boolean; data: { nodeCount: number; edgeCount: number } }>(
+          '/api/topology/query/statistics',
+        ),
+      );
+
+      this.totalServices.set(Number(stats.data?.nodeCount ?? 0));
+      this.totalDependencies.set(Number(stats.data?.edgeCount ?? 0));
+    } catch {
+      this.systemHealth.set('down');
+      return;
+    }
+
+    try {
+      const snapshots = await firstValueFrom(
+        this.api.get<PaginatedResponse<Record<string, unknown>> | Array<Record<string, unknown>>>('/api/registry/snapshots/'),
+      );
+      this.recentChanges.set(this.api.extractCollection(snapshots).length);
+      this.systemHealth.set('healthy');
+    } catch {
+      this.recentChanges.set(0);
+      this.systemHealth.set('degraded');
+    }
+  }
 }

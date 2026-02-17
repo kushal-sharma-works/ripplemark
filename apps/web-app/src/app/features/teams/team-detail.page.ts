@@ -1,7 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { TableModule } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
+import { firstValueFrom } from 'rxjs';
+import { ApiService, PaginatedResponse } from '../../core/services/api.service';
+import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   standalone: true,
@@ -18,7 +21,7 @@ import { ButtonModule } from 'primeng/button';
           <td>{{ member.name }}</td>
           <td>{{ member.role }}</td>
           <td>
-            @if (isAdmin) {
+            @if (isAdmin()) {
               <button pButton size="small" label="Manage"></button>
             }
           </td>
@@ -30,10 +33,36 @@ import { ButtonModule } from 'primeng/button';
 })
 export class TeamDetailPage {
   private readonly route = inject(ActivatedRoute);
+  private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
+
   readonly teamId = this.route.snapshot.paramMap.get('id') ?? 'unknown';
-  readonly isAdmin = true;
-  readonly members = signal([
-    { name: 'Kushal', role: 'admin' },
-    { name: 'Alex', role: 'engineer' },
-  ]);
+  readonly isAdmin = computed(() => this.auth.isAdmin());
+  readonly members = signal<Array<{ name: string; role: string }>>([]);
+
+  constructor() {
+    void this.loadMembers();
+  }
+
+  private async loadMembers(): Promise<void> {
+    try {
+      const memberships = await firstValueFrom(
+        this.api.get<
+          PaginatedResponse<{ team: string; role: string; user: string }> | Array<{ team: string; role: string; user: string }>
+        >('/api/registry/team-memberships/'),
+      );
+      const membershipRows = this.api.extractCollection(memberships);
+
+      this.members.set(
+        membershipRows
+          .filter((membership) => membership.team === this.teamId)
+          .map((membership) => ({
+            name: membership.user,
+            role: membership.role,
+          })),
+      );
+    } catch {
+      this.members.set([]);
+    }
+  }
 }

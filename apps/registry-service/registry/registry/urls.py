@@ -7,6 +7,7 @@ from rest_framework.authtoken.views import obtain_auth_token
 from apps.services.views import ServiceViewSet, ServiceVersionViewSet, ServiceEndpointViewSet
 from apps.teams.views import TeamViewSet, TeamMembershipViewSet, ServiceOwnershipViewSet
 from apps.snapshots.views import DependencySnapshotViewSet
+from registry.health_views import live, ready, metrics
 
 router = DefaultRouter()
 router.register(r"services", ServiceViewSet, basename="service")
@@ -23,4 +24,7 @@ urlpatterns = [
     path("api/auth/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("api/auth/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("api/auth/drf-token/", obtain_auth_token, name="drf_token"),
+    path("health/live", live, name="health_live"),
+    path("health/ready", ready, name="health_ready"),
+    path("metrics", metrics, name="metrics"),
 ]

@@ -8,6 +8,8 @@ import { GraphModule } from '@graph/graph.module';
 import { GraphSnapshot, GraphSnapshotSchema } from './schemas';
 import { PersistenceService } from './persistence';
 import { HealthController, RedisHealthIndicator } from './health';
+import { MetricsController } from '@app/observability/metrics.controller';
+import { TopologyMetricsService } from '@app/observability/metrics.service';
 
 @Global()
 @Module({
@@ -27,8 +29,8 @@ import { HealthController, RedisHealthIndicator } from './health';
     ScheduleModule.forRoot(),
     GraphModule,
   ],
-  controllers: [HealthController],
-  providers: [PersistenceService, RedisHealthIndicator],
-  exports: [PersistenceService, RedisModule],
+  controllers: [HealthController, MetricsController],
+  providers: [PersistenceService, RedisHealthIndicator, TopologyMetricsService],
+  exports: [PersistenceService, RedisModule, TopologyMetricsService],
 })
 export class InfrastructureModule {}

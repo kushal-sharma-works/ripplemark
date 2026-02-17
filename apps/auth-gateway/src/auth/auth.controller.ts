@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  HttpStatus,
   Get,
   Post,
   Req,
@@ -9,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
+import { ConfigService } from '@nestjs/config';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { AuthService } from './auth.service';
@@ -18,7 +20,10 @@ import { AuthGuard } from '@nestjs/passport';
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly config: ConfigService,
+  ) {}
 
   @Post('login')
   @UseGuards(LocalAuthGuard)
@@ -34,8 +39,15 @@ export class AuthController {
 
   @Get('oauth/google/callback')
   @UseGuards(AuthGuard('google'))
-  async googleCallback(@Req() req: { user: { email: string; displayName: string } }) {
-    return this.authService.oauthLogin(req.user.email, req.user.displayName);
+  async googleCallback(
+    @Req() req: { user: { email: string; displayName: string } },
+    @Res() res: Response,
+  ) {
+    const tokens = await this.authService.oauthLogin(req.user.email, req.user.displayName);
+    const webAppUrl = this.config.get<string>('WEB_APP_URL', 'http://localhost:4200');
+    const redirectUrl = `${webAppUrl}/login/google-callback?accessToken=${encodeURIComponent(tokens.accessToken)}&refreshToken=${encodeURIComponent(tokens.refreshToken)}`;
+
+    return res.redirect(HttpStatus.FOUND, redirectUrl);
   }
 
   @Post('refresh')

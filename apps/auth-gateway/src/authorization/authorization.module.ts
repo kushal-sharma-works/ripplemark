@@ -5,8 +5,10 @@ import { TeamAccessGuard } from './team-access.guard';
 
 @Module({
   providers: [
-    { provide: APP_GUARD, useClass: RolesGuard },
-    { provide: APP_GUARD, useClass: TeamAccessGuard },
+    RolesGuard,
+    TeamAccessGuard,
+    { provide: APP_GUARD, useExisting: RolesGuard },
+    { provide: APP_GUARD, useExisting: TeamAccessGuard },
   ],
   exports: [RolesGuard, TeamAccessGuard],
 })

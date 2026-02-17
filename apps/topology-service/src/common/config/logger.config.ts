@@ -1,4 +1,5 @@
 import { Params } from 'nestjs-pino';
+import { context, trace } from '@opentelemetry/api';
 
 export const loggerConfig: Params = {
   pinoHttp: {
@@ -15,9 +16,16 @@ export const loggerConfig: Params = {
             },
           }
         : undefined,
-    customProps: () => ({
-      context: 'HTTP',
-    }),
+    customProps: () => {
+      const span = trace.getSpan(context.active());
+      const spanContext = span?.spanContext();
+
+      return {
+        context: 'HTTP',
+        trace_id: spanContext?.traceId,
+        span_id: spanContext?.spanId,
+      };
+    },
     serializers: {
       req(req: any) {
         return {
@@ -38,7 +46,14 @@ export const loggerConfig: Params = {
     autoLogging: {
       ignore: (req: any) => {
         // Don't log health check endpoints
-        return req.url === '/health' || req.url === '/health/liveness';
+        return (
+          req.url === '/health' ||
+          req.url === '/health/liveness' ||
+          req.url === '/health/live' ||
+          req.url === '/health/readiness' ||
+          req.url === '/health/ready' ||
+          req.url === '/metrics'
+        );
       },
     },
     customSuccessMessage: (req: any, res: any) => {

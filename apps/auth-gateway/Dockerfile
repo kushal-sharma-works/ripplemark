@@ -3,7 +3,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig*.json ./
 COPY nest-cli.json ./
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 COPY src ./src
 COPY test ./test
 RUN npm run build

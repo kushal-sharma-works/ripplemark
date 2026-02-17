@@ -2,21 +2,26 @@ from __future__ import annotations
 
 import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends
+from opentelemetry import trace
 
 from analysis_service.analysis import ImpactAnalysisEngine
 from analysis_service.core.http_client import TopologyClient, get_topology_client
+from analysis_service.core.metrics import analysis_risk_score_histogram
 from analysis_service.schemas.analysis import ChangeProposal, ImpactAssessment
 
 router = APIRouter()
 engine = ImpactAnalysisEngine()
 
 _ANALYSIS_RESULTS: dict[str, ImpactAssessment] = {}
+tracer = trace.get_tracer("analysis-service")
 
 
 async def _run_analysis(change: ChangeProposal, client: TopologyClient, key: str) -> None:
-    graph = await client.fetch_graph()
-    result = engine.analyze(change, graph)
-    _ANALYSIS_RESULTS[key] = result
+    with tracer.start_as_current_span("analysis.async.run"):
+        graph = await client.fetch_graph()
+        result = engine.analyze(change, graph)
+        analysis_risk_score_histogram.observe(result.risk_score)
+        _ANALYSIS_RESULTS[key] = result
 
 
 @router.post("/impact", response_model=ImpactAssessment)
@@ -24,8 +29,11 @@ async def run_impact_analysis(
     change: ChangeProposal,
     client: TopologyClient = Depends(get_topology_client),
 ):
-    graph = await client.fetch_graph()
-    return engine.analyze(change, graph)
+    with tracer.start_as_current_span("analysis.sync.run"):
+        graph = await client.fetch_graph()
+        result = engine.analyze(change, graph)
+        analysis_risk_score_histogram.observe(result.risk_score)
+        return result
 
 
 @router.post("/impact/async")

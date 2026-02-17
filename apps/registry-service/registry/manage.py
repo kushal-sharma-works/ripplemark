@@ -8,6 +8,9 @@ def main() -> None:
     base_dir = Path(__file__).resolve().parent
     sys.path.append(str(base_dir))
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "registry.settings.dev")
+    from registry.observability import setup_observability
+
+    setup_observability("registry-service")
     from django.core.management import execute_from_command_line
 
     execute_from_command_line(sys.argv)

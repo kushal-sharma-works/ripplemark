@@ -42,6 +42,12 @@ export class HealthController {
     };
   }
 
+  @Get('live')
+  @ApiOperation({ summary: 'Liveness probe alias' })
+  live() {
+    return this.liveness();
+  }
+
   @Get('readiness')
   @HealthCheck()
   @ApiOperation({ summary: 'Readiness probe for Kubernetes' })
@@ -52,5 +58,12 @@ export class HealthController {
       () => this.mongooseHealth.pingCheck('mongodb', { timeout: 1000 }),
       () => this.redisHealth.isHealthy('redis'),
     ]);
+  }
+
+  @Get('ready')
+  @HealthCheck()
+  @ApiOperation({ summary: 'Readiness probe alias' })
+  ready() {
+    return this.readiness();
   }
 }
