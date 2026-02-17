@@ -124,6 +124,8 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       NATS_URL: nats://nats:4222
+      REGISTRY_PROXY_USERNAME: ${REGISTRY_PROXY_USERNAME:-local-ui-demo-proxy}
+      REGISTRY_PROXY_TOKEN: ${REGISTRY_PROXY_TOKEN:-localuidemoproxytoken1234567890abcdef12}
     ports:
       - "${REGISTRY_PORT}:8000"
     depends_on:

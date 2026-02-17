@@ -13,6 +13,8 @@ REGISTRY_PROXY_TOKEN="localuidemoproxytoken1234567890abcdef12"
 
 TEAM_PLATFORM_NAME="${DEMO_PREFIX}-platform"
 TEAM_UI_NAME="${DEMO_PREFIX}-ui"
+TEAM_DATA_NAME="${DEMO_PREFIX}-data"
+TEAM_SRE_NAME="${DEMO_PREFIX}-sre"
 
 log() {
   echo "[setup-local-ui-demo] $*"
@@ -210,7 +212,7 @@ DO UPDATE SET
 SQL
 
 log "Ensuring registry proxy auth token user"
-docker compose -f docker-compose.yml exec -T registry-service sh -lc "cd /app/registry && python manage.py shell -c \"from django.contrib.auth import get_user_model; from rest_framework.authtoken.models import Token; U=get_user_model(); u,_=U.objects.get_or_create(username='${REGISTRY_PROXY_USERNAME}', defaults={'email':'${REGISTRY_PROXY_USERNAME}@ripplemark.local'}); u.set_password('${AUTH_PASSWORD}'); u.is_staff=True; u.save(); t,_=Token.objects.get_or_create(user=u); t.key='${REGISTRY_PROXY_TOKEN}'; t.save(update_fields=['key']); print(t.key)\"" >/dev/null
+log "Registry proxy token/user bootstrap is handled by registry-service startup"
 
 log "Logging in to auth gateway"
 LOGIN_RESULT="$(api_request "POST" "http://localhost:3000/auth/login" "{\"email\":\"${AUTH_EMAIL}\",\"password\":\"${AUTH_PASSWORD}\"}")"
@@ -236,6 +238,12 @@ TOPO_REGISTRY_SERVICE="${DEMO_PREFIX}-registry"
 TOPO_ANALYSIS_SERVICE="${DEMO_PREFIX}-analysis"
 TOPO_WORKER_A_SERVICE="${DEMO_PREFIX}-worker-a"
 TOPO_WORKER_B_SERVICE="${DEMO_PREFIX}-worker-b"
+TOPO_WEB_SERVICE="${DEMO_PREFIX}-web-app"
+TOPO_SEARCH_SERVICE="${DEMO_PREFIX}-search"
+TOPO_BILLING_SERVICE="${DEMO_PREFIX}-billing"
+TOPO_NOTIFIER_SERVICE="${DEMO_PREFIX}-notifier"
+TOPO_ETL_SERVICE="${DEMO_PREFIX}-etl"
+TOPO_LEGACY_SERVICE="${DEMO_PREFIX}-legacy"
 
 log "Cleaning previous topology demo dataset (idempotent reset)"
 OLD_DEPS=(
@@ -295,6 +303,53 @@ for dep in "${DEPS[@]}"; do
   fi
 done
 
+log "Seeding extra topology scenarios"
+
+EXTRA_SERVICES=(
+  "$TOPO_WEB_SERVICE|sync|ui|2|healthy|2.0.0"
+  "$TOPO_SEARCH_SERVICE|async|data|3|degraded|1.6.2"
+  "$TOPO_BILLING_SERVICE|sync|platform|4|healthy|3.2.1"
+  "$TOPO_NOTIFIER_SERVICE|async|sre|2|healthy|1.1.0"
+  "$TOPO_ETL_SERVICE|async|data|4|degraded|0.14.0"
+  "$TOPO_LEGACY_SERVICE|sync|platform|5|down|0.9.7"
+)
+
+for spec in "${EXTRA_SERVICES[@]}"; do
+  IFS='|' read -r svc stype team criticality sstatus version <<<"$spec"
+  api_request "DELETE" "http://localhost:3001/api/v1/ingestion/services/${svc}" "" "$AUTH_HEADER" >/dev/null || true
+  RESULT="$(api_request "POST" "http://localhost:3001/api/v1/ingestion/services" "{\"id\":\"${svc}\",\"name\":\"${svc}\",\"version\":\"${version}\",\"type\":\"${stype}\",\"metadata\":{\"team\":\"${team}\",\"criticality\":${criticality},\"status\":\"${sstatus}\"}}" "$AUTH_HEADER")"
+  STATUS="$(extract_status "$RESULT")"
+  if ! assert_status_in "$STATUS" "200" "201"; then
+    log "Failed to create extra topology service $svc (status $STATUS)"
+    echo "$(extract_body "$RESULT")"
+    exit 1
+  fi
+done
+
+EXTRA_DEPS=(
+  "$TOPO_WEB_SERVICE|$TOPO_AUTH_SERVICE|http"
+  "$TOPO_WEB_SERVICE|$TOPO_SEARCH_SERVICE|http"
+  "$TOPO_SEARCH_SERVICE|$TOPO_NOTIFIER_SERVICE|grpc"
+  "$TOPO_NOTIFIER_SERVICE|$TOPO_BILLING_SERVICE|event"
+  "$TOPO_BILLING_SERVICE|$TOPO_REGISTRY_SERVICE|http"
+  "$TOPO_ETL_SERVICE|$TOPO_SEARCH_SERVICE|event"
+  "$TOPO_REGISTRY_SERVICE|$TOPO_ETL_SERVICE|event"
+  "$TOPO_AUTH_SERVICE|$TOPO_LEGACY_SERVICE|http"
+  "$TOPO_LEGACY_SERVICE|$TOPO_AUTH_SERVICE|grpc"
+)
+
+for dep in "${EXTRA_DEPS[@]}"; do
+  IFS='|' read -r src tgt dtype <<<"$dep"
+  api_request "DELETE" "http://localhost:3001/api/v1/ingestion/dependencies/${src}/${tgt}/${dtype}" "" "$AUTH_HEADER" >/dev/null || true
+  RESULT="$(api_request "POST" "http://localhost:3001/api/v1/ingestion/dependencies" "{\"source\":\"${src}\",\"target\":\"${tgt}\",\"type\":\"${dtype}\"}" "$AUTH_HEADER")"
+  STATUS="$(extract_status "$RESULT")"
+  if ! assert_status_in "$STATUS" "200" "201"; then
+    log "Failed to create extra dependency ${src} -> ${tgt} (${dtype}) status $STATUS"
+    echo "$(extract_body "$RESULT")"
+    exit 1
+  fi
+done
+
 log "Seeding analysis example call"
 ANALYSIS_RESULT="$(api_request "POST" "http://localhost:8000/analysis/impact" "{\"service_name\":\"${TOPO_AUTH_SERVICE}\",\"change_type\":\"schema_change\",\"details\":\"local-demo-seed\",\"max_depth\":5}" "$AUTH_HEADER")"
 ANALYSIS_STATUS="$(extract_status "$ANALYSIS_RESULT")"
@@ -313,22 +368,26 @@ REGISTRY_TEAMS_STATUS="$(extract_status "$REGISTRY_TEAMS_RESULT")"
 REGISTRY_TEAMS_BODY="$(extract_body "$REGISTRY_TEAMS_RESULT")"
 
 if assert_status_in "$REGISTRY_LIST_STATUS" "200"; then
-  while IFS= read -r service_id; do
-    [[ -z "$service_id" ]] && continue
-    api_request "DELETE" "http://localhost:8001/api/services/${service_id}/" "" "$AUTH_HEADER" >/dev/null || true
-  done < <(json_extract_ids "$REGISTRY_LIST_BODY" "service_name" "$TOPO_AUTH_SERVICE")
-  while IFS= read -r service_id; do
-    [[ -z "$service_id" ]] && continue
-    api_request "DELETE" "http://localhost:8001/api/services/${service_id}/" "" "$AUTH_HEADER" >/dev/null || true
-  done < <(json_extract_ids "$REGISTRY_LIST_BODY" "service_name" "$TOPO_ANALYSIS_SERVICE")
-  while IFS= read -r service_id; do
-    [[ -z "$service_id" ]] && continue
-    api_request "DELETE" "http://localhost:8001/api/services/${service_id}/" "" "$AUTH_HEADER" >/dev/null || true
-  done < <(json_extract_ids "$REGISTRY_LIST_BODY" "service_name" "$TOPO_REGISTRY_SERVICE")
-  while IFS= read -r service_id; do
-    [[ -z "$service_id" ]] && continue
-    api_request "DELETE" "http://localhost:8001/api/services/${service_id}/" "" "$AUTH_HEADER" >/dev/null || true
-  done < <(json_extract_ids "$REGISTRY_LIST_BODY" "service_name" "$TOPO_WORKER_A_SERVICE")
+  REGISTRY_SERVICE_NAMES=(
+    "$TOPO_AUTH_SERVICE"
+    "$TOPO_ANALYSIS_SERVICE"
+    "$TOPO_REGISTRY_SERVICE"
+    "$TOPO_WORKER_A_SERVICE"
+    "$TOPO_WORKER_B_SERVICE"
+    "$TOPO_WEB_SERVICE"
+    "$TOPO_SEARCH_SERVICE"
+    "$TOPO_BILLING_SERVICE"
+    "$TOPO_NOTIFIER_SERVICE"
+    "$TOPO_ETL_SERVICE"
+    "$TOPO_LEGACY_SERVICE"
+  )
+
+  for svc_name in "${REGISTRY_SERVICE_NAMES[@]}"; do
+    while IFS= read -r service_id; do
+      [[ -z "$service_id" ]] && continue
+      api_request "DELETE" "http://localhost:8001/api/services/${service_id}/" "" "$AUTH_HEADER" >/dev/null || true
+    done < <(json_extract_ids "$REGISTRY_LIST_BODY" "service_name" "$svc_name")
+  done
 fi
 
 if assert_status_in "$REGISTRY_TEAMS_STATUS" "200"; then
@@ -341,19 +400,31 @@ if assert_status_in "$REGISTRY_TEAMS_STATUS" "200"; then
     [[ -z "$team_id" ]] && continue
     api_request "DELETE" "http://localhost:8001/api/teams/${team_id}/" "" "$AUTH_HEADER" >/dev/null || true
   done < <(json_extract_ids "$REGISTRY_TEAMS_BODY" "team_name" "$TEAM_UI_NAME")
+
+  while IFS= read -r team_id; do
+    [[ -z "$team_id" ]] && continue
+    api_request "DELETE" "http://localhost:8001/api/teams/${team_id}/" "" "$AUTH_HEADER" >/dev/null || true
+  done < <(json_extract_ids "$REGISTRY_TEAMS_BODY" "team_name" "$TEAM_DATA_NAME")
+
+  while IFS= read -r team_id; do
+    [[ -z "$team_id" ]] && continue
+    api_request "DELETE" "http://localhost:8001/api/teams/${team_id}/" "" "$AUTH_HEADER" >/dev/null || true
+  done < <(json_extract_ids "$REGISTRY_TEAMS_BODY" "team_name" "$TEAM_SRE_NAME")
 fi
 
 create_registry_service() {
   local name="$1"
   local service_type="$2"
+  local service_status="${3:-active}"
+  local description="${4:-Demo service ${name}}"
   local result
-  local status
+  local response_status
 
-  result="$(api_request "POST" "http://localhost:8001/api/services/" "{\"name\":\"${name}\",\"description\":\"Demo service ${name}\",\"service_type\":\"${service_type}\",\"status\":\"active\"}" "$AUTH_HEADER")"
-  status="$(extract_status "$result")"
+  result="$(api_request "POST" "http://localhost:8001/api/services/" "{\"name\":\"${name}\",\"description\":\"${description}\",\"service_type\":\"${service_type}\",\"status\":\"${service_status}\"}" "$AUTH_HEADER")"
+  response_status="$(extract_status "$result")"
 
-  if ! assert_status_in "$status" "200" "201" "401" "403"; then
-    log "Registry service seed failed for ${name} with unexpected status ${status}"
+  if ! assert_status_in "$response_status" "200" "201" "401" "403"; then
+    log "Registry service seed failed for ${name} with unexpected status ${response_status}"
     echo "$(extract_body "$result")"
   fi
 }
@@ -362,6 +433,13 @@ create_registry_service "$TOPO_AUTH_SERVICE" "gateway"
 create_registry_service "$TOPO_ANALYSIS_SERVICE" "worker"
 create_registry_service "$TOPO_REGISTRY_SERVICE" "api"
 create_registry_service "$TOPO_WORKER_A_SERVICE" "worker"
+create_registry_service "$TOPO_WORKER_B_SERVICE" "worker"
+create_registry_service "$TOPO_WEB_SERVICE" "gateway"
+create_registry_service "$TOPO_SEARCH_SERVICE" "api" "active" "Search API with async indexing"
+create_registry_service "$TOPO_BILLING_SERVICE" "api"
+create_registry_service "$TOPO_NOTIFIER_SERVICE" "worker" "active" "Async notifications"
+create_registry_service "$TOPO_ETL_SERVICE" "scheduler" "active" "Nightly ETL pipeline"
+create_registry_service "$TOPO_LEGACY_SERVICE" "api" "deprecated" "Legacy service pending decommission"
 
 TEAM_PLATFORM_RESULT="$(api_request "POST" "http://localhost:8001/api/teams/" "{\"name\":\"${TEAM_PLATFORM_NAME}\",\"description\":\"Platform demo team\"}" "$AUTH_HEADER")"
 TEAM_PLATFORM_STATUS="$(extract_status "$TEAM_PLATFORM_RESULT")"
@@ -377,6 +455,20 @@ if ! assert_status_in "$TEAM_UI_STATUS" "200" "201" "401" "403"; then
   echo "$(extract_body "$TEAM_UI_RESULT")"
 fi
 
+TEAM_DATA_RESULT="$(api_request "POST" "http://localhost:8001/api/teams/" "{\"name\":\"${TEAM_DATA_NAME}\",\"description\":\"Data engineering demo team\"}" "$AUTH_HEADER")"
+TEAM_DATA_STATUS="$(extract_status "$TEAM_DATA_RESULT")"
+if ! assert_status_in "$TEAM_DATA_STATUS" "200" "201" "401" "403"; then
+  log "Registry team seed failed for ${TEAM_DATA_NAME} with unexpected status $TEAM_DATA_STATUS"
+  echo "$(extract_body "$TEAM_DATA_RESULT")"
+fi
+
+TEAM_SRE_RESULT="$(api_request "POST" "http://localhost:8001/api/teams/" "{\"name\":\"${TEAM_SRE_NAME}\",\"description\":\"SRE demo team\"}" "$AUTH_HEADER")"
+TEAM_SRE_STATUS="$(extract_status "$TEAM_SRE_RESULT")"
+if ! assert_status_in "$TEAM_SRE_STATUS" "200" "201" "401" "403"; then
+  log "Registry team seed failed for ${TEAM_SRE_NAME} with unexpected status $TEAM_SRE_STATUS"
+  echo "$(extract_body "$TEAM_SRE_RESULT")"
+fi
+
 REGISTRY_SERVICES_NOW_RESULT="$(api_request "GET" "http://localhost:8001/api/services/" "" "$AUTH_HEADER")"
 REGISTRY_SERVICES_NOW_STATUS="$(extract_status "$REGISTRY_SERVICES_NOW_RESULT")"
 REGISTRY_SERVICES_NOW_BODY="$(extract_body "$REGISTRY_SERVICES_NOW_RESULT")"
@@ -388,26 +480,62 @@ REGISTRY_TEAMS_NOW_BODY="$(extract_body "$REGISTRY_TEAMS_NOW_RESULT")"
 if assert_status_in "$REGISTRY_SERVICES_NOW_STATUS" "200" && assert_status_in "$REGISTRY_TEAMS_NOW_STATUS" "200"; then
   PLATFORM_TEAM_ID="$(json_extract_ids "$REGISTRY_TEAMS_NOW_BODY" "team_name" "$TEAM_PLATFORM_NAME" | head -n 1)"
   UI_TEAM_ID="$(json_extract_ids "$REGISTRY_TEAMS_NOW_BODY" "team_name" "$TEAM_UI_NAME" | head -n 1)"
+  DATA_TEAM_ID="$(json_extract_ids "$REGISTRY_TEAMS_NOW_BODY" "team_name" "$TEAM_DATA_NAME" | head -n 1)"
+  SRE_TEAM_ID="$(json_extract_ids "$REGISTRY_TEAMS_NOW_BODY" "team_name" "$TEAM_SRE_NAME" | head -n 1)"
 
   AUTH_SERVICE_ID="$(json_extract_ids "$REGISTRY_SERVICES_NOW_BODY" "service_name" "$TOPO_AUTH_SERVICE" | head -n 1)"
   ANALYSIS_SERVICE_ID="$(json_extract_ids "$REGISTRY_SERVICES_NOW_BODY" "service_name" "$TOPO_ANALYSIS_SERVICE" | head -n 1)"
   REGISTRY_SERVICE_ID="$(json_extract_ids "$REGISTRY_SERVICES_NOW_BODY" "service_name" "$TOPO_REGISTRY_SERVICE" | head -n 1)"
   WORKER_A_SERVICE_ID="$(json_extract_ids "$REGISTRY_SERVICES_NOW_BODY" "service_name" "$TOPO_WORKER_A_SERVICE" | head -n 1)"
+  WORKER_B_SERVICE_ID="$(json_extract_ids "$REGISTRY_SERVICES_NOW_BODY" "service_name" "$TOPO_WORKER_B_SERVICE" | head -n 1)"
+  WEB_SERVICE_ID="$(json_extract_ids "$REGISTRY_SERVICES_NOW_BODY" "service_name" "$TOPO_WEB_SERVICE" | head -n 1)"
+  SEARCH_SERVICE_ID="$(json_extract_ids "$REGISTRY_SERVICES_NOW_BODY" "service_name" "$TOPO_SEARCH_SERVICE" | head -n 1)"
+  BILLING_SERVICE_ID="$(json_extract_ids "$REGISTRY_SERVICES_NOW_BODY" "service_name" "$TOPO_BILLING_SERVICE" | head -n 1)"
+  NOTIFIER_SERVICE_ID="$(json_extract_ids "$REGISTRY_SERVICES_NOW_BODY" "service_name" "$TOPO_NOTIFIER_SERVICE" | head -n 1)"
+  ETL_SERVICE_ID="$(json_extract_ids "$REGISTRY_SERVICES_NOW_BODY" "service_name" "$TOPO_ETL_SERVICE" | head -n 1)"
+  LEGACY_SERVICE_ID="$(json_extract_ids "$REGISTRY_SERVICES_NOW_BODY" "service_name" "$TOPO_LEGACY_SERVICE" | head -n 1)"
 
-  if [[ -n "$PLATFORM_TEAM_ID" && -n "$AUTH_SERVICE_ID" ]]; then
-    api_request "POST" "http://localhost:8001/api/ownerships/" "{\"service\":\"${AUTH_SERVICE_ID}\",\"team\":\"${PLATFORM_TEAM_ID}\",\"ownership_type\":\"primary\"}" "$AUTH_HEADER" >/dev/null || true
-  fi
-  if [[ -n "$PLATFORM_TEAM_ID" && -n "$ANALYSIS_SERVICE_ID" ]]; then
-    api_request "POST" "http://localhost:8001/api/ownerships/" "{\"service\":\"${ANALYSIS_SERVICE_ID}\",\"team\":\"${PLATFORM_TEAM_ID}\",\"ownership_type\":\"primary\"}" "$AUTH_HEADER" >/dev/null || true
-  fi
-  if [[ -n "$PLATFORM_TEAM_ID" && -n "$REGISTRY_SERVICE_ID" ]]; then
-    api_request "POST" "http://localhost:8001/api/ownerships/" "{\"service\":\"${REGISTRY_SERVICE_ID}\",\"team\":\"${PLATFORM_TEAM_ID}\",\"ownership_type\":\"primary\"}" "$AUTH_HEADER" >/dev/null || true
-  fi
-  if [[ -n "$UI_TEAM_ID" && -n "$WORKER_A_SERVICE_ID" ]]; then
-    api_request "POST" "http://localhost:8001/api/ownerships/" "{\"service\":\"${WORKER_A_SERVICE_ID}\",\"team\":\"${UI_TEAM_ID}\",\"ownership_type\":\"secondary\"}" "$AUTH_HEADER" >/dev/null || true
-  fi
+  create_ownership() {
+    local service_id="$1"
+    local team_id="$2"
+    local ownership_type="$3"
+    if [[ -n "$service_id" && -n "$team_id" ]]; then
+      api_request "POST" "http://localhost:8001/api/ownerships/" "{\"service\":\"${service_id}\",\"team\":\"${team_id}\",\"ownership_type\":\"${ownership_type}\"}" "$AUTH_HEADER" >/dev/null || true
+    fi
+  }
 
-  DEMO_USER_ID="$(docker compose -f docker-compose.yml exec -T registry-service sh -lc "cd /app/registry && python manage.py shell -c \"from django.contrib.auth import get_user_model; U=get_user_model(); u,_=U.objects.get_or_create(username='${DEMO_PREFIX}-member', defaults={'email':'${DEMO_PREFIX}-member@ripplemark.local'}); u.set_password('${AUTH_PASSWORD}'); u.is_staff=True; u.save(); print(u.id)\"" | tr -d '\r' | tail -n 1)"
+  create_ownership "$AUTH_SERVICE_ID" "$PLATFORM_TEAM_ID" "primary"
+  create_ownership "$ANALYSIS_SERVICE_ID" "$DATA_TEAM_ID" "primary"
+  create_ownership "$REGISTRY_SERVICE_ID" "$PLATFORM_TEAM_ID" "primary"
+  create_ownership "$WORKER_A_SERVICE_ID" "$UI_TEAM_ID" "primary"
+  create_ownership "$WORKER_B_SERVICE_ID" "$SRE_TEAM_ID" "primary"
+  create_ownership "$WEB_SERVICE_ID" "$UI_TEAM_ID" "primary"
+  create_ownership "$SEARCH_SERVICE_ID" "$DATA_TEAM_ID" "primary"
+  create_ownership "$BILLING_SERVICE_ID" "$PLATFORM_TEAM_ID" "primary"
+  create_ownership "$NOTIFIER_SERVICE_ID" "$SRE_TEAM_ID" "primary"
+  create_ownership "$ETL_SERVICE_ID" "$DATA_TEAM_ID" "primary"
+  create_ownership "$LEGACY_SERVICE_ID" "$PLATFORM_TEAM_ID" "primary"
+
+  create_ownership "$BILLING_SERVICE_ID" "$SRE_TEAM_ID" "secondary"
+  create_ownership "$SEARCH_SERVICE_ID" "$UI_TEAM_ID" "secondary"
+  create_ownership "$ANALYSIS_SERVICE_ID" "$PLATFORM_TEAM_ID" "secondary"
+
+  docker compose -f docker-compose.yml exec -T postgres psql -U ripplemark -d ripplemark -v ON_ERROR_STOP=1 >/dev/null <<SQL
+INSERT INTO auth_user (
+  password, last_login, is_superuser, username, first_name, last_name, email, is_staff, is_active, date_joined
+) VALUES
+  ('!', NULL, false, '${DEMO_PREFIX}-member', '', '', '${DEMO_PREFIX}-member@ripplemark.local', true, true, now()),
+  ('!', NULL, false, '${DEMO_PREFIX}-analyst', '', '', '${DEMO_PREFIX}-analyst@ripplemark.local', true, true, now()),
+  ('!', NULL, false, '${DEMO_PREFIX}-oncall', '', '', '${DEMO_PREFIX}-oncall@ripplemark.local', true, true, now())
+ON CONFLICT (username) DO UPDATE SET
+  email = EXCLUDED.email,
+  is_staff = true,
+  is_active = true;
+SQL
+
+  DEMO_USER_ID="$(docker compose -f docker-compose.yml exec -T postgres psql -U ripplemark -d ripplemark -Atc "SELECT id FROM auth_user WHERE username='${DEMO_PREFIX}-member' LIMIT 1;" | tr -d '\r')"
+  ANALYST_USER_ID="$(docker compose -f docker-compose.yml exec -T postgres psql -U ripplemark -d ripplemark -Atc "SELECT id FROM auth_user WHERE username='${DEMO_PREFIX}-analyst' LIMIT 1;" | tr -d '\r')"
+  ONCALL_USER_ID="$(docker compose -f docker-compose.yml exec -T postgres psql -U ripplemark -d ripplemark -Atc "SELECT id FROM auth_user WHERE username='${DEMO_PREFIX}-oncall' LIMIT 1;" | tr -d '\r')"
 
   if [[ -n "$DEMO_USER_ID" && -n "$PLATFORM_TEAM_ID" ]]; then
     api_request "POST" "http://localhost:8001/api/team-memberships/" "{\"team\":\"${PLATFORM_TEAM_ID}\",\"user\":${DEMO_USER_ID},\"role\":\"owner\"}" "$AUTH_HEADER" >/dev/null || true
@@ -415,18 +543,47 @@ if assert_status_in "$REGISTRY_SERVICES_NOW_STATUS" "200" && assert_status_in "$
   if [[ -n "$DEMO_USER_ID" && -n "$UI_TEAM_ID" ]]; then
     api_request "POST" "http://localhost:8001/api/team-memberships/" "{\"team\":\"${UI_TEAM_ID}\",\"user\":${DEMO_USER_ID},\"role\":\"maintainer\"}" "$AUTH_HEADER" >/dev/null || true
   fi
+  if [[ -n "$ANALYST_USER_ID" && -n "$DATA_TEAM_ID" ]]; then
+    api_request "POST" "http://localhost:8001/api/team-memberships/" "{\"team\":\"${DATA_TEAM_ID}\",\"user\":${ANALYST_USER_ID},\"role\":\"owner\"}" "$AUTH_HEADER" >/dev/null || true
+  fi
+  if [[ -n "$ANALYST_USER_ID" && -n "$PLATFORM_TEAM_ID" ]]; then
+    api_request "POST" "http://localhost:8001/api/team-memberships/" "{\"team\":\"${PLATFORM_TEAM_ID}\",\"user\":${ANALYST_USER_ID},\"role\":\"viewer\"}" "$AUTH_HEADER" >/dev/null || true
+  fi
+  if [[ -n "$ONCALL_USER_ID" && -n "$SRE_TEAM_ID" ]]; then
+    api_request "POST" "http://localhost:8001/api/team-memberships/" "{\"team\":\"${SRE_TEAM_ID}\",\"user\":${ONCALL_USER_ID},\"role\":\"maintainer\"}" "$AUTH_HEADER" >/dev/null || true
+  fi
 
-  if [[ -n "$AUTH_SERVICE_ID" ]]; then
-    AUTH_VERSION_RESULT="$(api_request "POST" "http://localhost:8001/api/service-versions/" "{\"service\":\"${AUTH_SERVICE_ID}\",\"version\":\"1.0.0\",\"changelog\":\"Initial demo release\",\"endpoints\":[\"/auth/login\",\"/auth/refresh\"],\"dependencies\":[\"analysis\",\"registry\"],\"is_current\":true}" "$AUTH_HEADER")"
-    AUTH_VERSION_STATUS="$(extract_status "$AUTH_VERSION_RESULT")"
-    if assert_status_in "$AUTH_VERSION_STATUS" "200" "201"; then
-      AUTH_VERSION_ID="$(json_extract_field "$(extract_body "$AUTH_VERSION_RESULT")" "id")"
-      if [[ -n "$AUTH_VERSION_ID" ]]; then
-        api_request "POST" "http://localhost:8001/api/service-endpoints/" "{\"service_version\":${AUTH_VERSION_ID},\"path\":\"/auth/login\",\"method\":\"POST\",\"request_schema\":{\"type\":\"object\"},\"response_schema\":{\"type\":\"object\"}}" "$AUTH_HEADER" >/dev/null || true
-        api_request "POST" "http://localhost:8001/api/service-endpoints/" "{\"service_version\":${AUTH_VERSION_ID},\"path\":\"/auth/refresh\",\"method\":\"POST\",\"request_schema\":{\"type\":\"object\"},\"response_schema\":{\"type\":\"object\"}}" "$AUTH_HEADER" >/dev/null || true
+  seed_service_version() {
+    local service_id="$1"
+    local version="$2"
+    local is_current="$3"
+    local changelog="$4"
+    local endpoint_1="$5"
+    local endpoint_2="$6"
+    local method_1="$7"
+    local method_2="$8"
+
+    if [[ -z "$service_id" ]]; then
+      return
+    fi
+
+    VERSION_RESULT="$(api_request "POST" "http://localhost:8001/api/service-versions/" "{\"service\":\"${service_id}\",\"version\":\"${version}\",\"changelog\":\"${changelog}\",\"endpoints\":[\"${endpoint_1}\",\"${endpoint_2}\"],\"dependencies\":[\"registry\",\"analysis\"],\"is_current\":${is_current}}" "$AUTH_HEADER")"
+    VERSION_STATUS="$(extract_status "$VERSION_RESULT")"
+    if assert_status_in "$VERSION_STATUS" "200" "201"; then
+      VERSION_ID="$(json_extract_field "$(extract_body "$VERSION_RESULT")" "id")"
+      if [[ -n "$VERSION_ID" ]]; then
+        api_request "POST" "http://localhost:8001/api/service-endpoints/" "{\"service_version\":${VERSION_ID},\"path\":\"${endpoint_1}\",\"method\":\"${method_1}\",\"request_schema\":{\"type\":\"object\"},\"response_schema\":{\"type\":\"object\"}}" "$AUTH_HEADER" >/dev/null || true
+        api_request "POST" "http://localhost:8001/api/service-endpoints/" "{\"service_version\":${VERSION_ID},\"path\":\"${endpoint_2}\",\"method\":\"${method_2}\",\"request_schema\":{\"type\":\"object\"},\"response_schema\":{\"type\":\"object\"}}" "$AUTH_HEADER" >/dev/null || true
       fi
     fi
-  fi
+  }
+
+  seed_service_version "$AUTH_SERVICE_ID" "0.9.0" "false" "Legacy auth contract" "/auth/token" "/auth/introspect" "POST" "GET"
+  seed_service_version "$AUTH_SERVICE_ID" "1.1.0" "true" "Tenant-aware login + refresh hardening" "/auth/login" "/auth/refresh" "POST" "POST"
+  seed_service_version "$BILLING_SERVICE_ID" "3.1.0" "false" "Invoice v1 endpoints" "/billing/invoices" "/billing/invoices/{id}" "GET" "GET"
+  seed_service_version "$BILLING_SERVICE_ID" "3.2.1" "true" "Invoice write API + reconciliation" "/billing/invoices" "/billing/reconcile" "POST" "POST"
+  seed_service_version "$SEARCH_SERVICE_ID" "1.6.2" "true" "Search with ranking improvements" "/search/query" "/search/suggest" "POST" "GET"
+  seed_service_version "$LEGACY_SERVICE_ID" "0.9.7" "true" "Deprecated service retained for rollback" "/legacy/report" "/legacy/export" "GET" "POST"
 fi
 
 SNAPSHOT_LIST_RESULT="$(api_request "GET" "http://localhost:8001/api/snapshots/" "" "$AUTH_HEADER")"
@@ -452,6 +609,13 @@ SNAPSHOT_2_STATUS="$(extract_status "$SNAPSHOT_2_RESULT")"
 if ! assert_status_in "$SNAPSHOT_2_STATUS" "200" "201" "401" "403"; then
   log "Registry snapshot changed seed failed with unexpected status $SNAPSHOT_2_STATUS"
   echo "$(extract_body "$SNAPSHOT_2_RESULT")"
+fi
+
+SNAPSHOT_3_RESULT="$(api_request "POST" "http://localhost:8001/api/snapshots/" "{\"graph_data\":{\"nodes\":[{\"id\":\"${TOPO_AUTH_SERVICE}\"},{\"id\":\"${TOPO_ANALYSIS_SERVICE}\"},{\"id\":\"${TOPO_SEARCH_SERVICE}\"},{\"id\":\"${TOPO_BILLING_SERVICE}\"},{\"id\":\"${TOPO_NOTIFIER_SERVICE}\"}],\"edges\":[{\"source\":\"${TOPO_AUTH_SERVICE}\",\"target\":\"${TOPO_ANALYSIS_SERVICE}\"},{\"source\":\"${TOPO_ANALYSIS_SERVICE}\",\"target\":\"${TOPO_SEARCH_SERVICE}\"},{\"source\":\"${TOPO_SEARCH_SERVICE}\",\"target\":\"${TOPO_BILLING_SERVICE}\"},{\"source\":\"${TOPO_BILLING_SERVICE}\",\"target\":\"${TOPO_NOTIFIER_SERVICE}\"}]},\"service_count\":5,\"edge_count\":4,\"notes\":\"${DEMO_PREFIX} expanded\"}" "$AUTH_HEADER")"
+SNAPSHOT_3_STATUS="$(extract_status "$SNAPSHOT_3_RESULT")"
+if ! assert_status_in "$SNAPSHOT_3_STATUS" "200" "201" "401" "403"; then
+  log "Registry snapshot expanded seed failed with unexpected status $SNAPSHOT_3_STATUS"
+  echo "$(extract_body "$SNAPSHOT_3_RESULT")"
 fi
 
 log "Opening web app"
