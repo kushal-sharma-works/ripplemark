@@ -1,11 +1,13 @@
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { startTracing } from './observability/tracing';
+import { ProxyMiddleware } from './proxy/proxy.middleware';
 
 async function bootstrap() {
   await startTracing('auth-gateway');
@@ -16,6 +18,11 @@ async function bootstrap() {
   app.use(helmet());
   const config = app.get(ConfigService);
   app.enableCors({ origin: config.get<string>('CORS_ORIGINS', '*').split(',') });
+
+  const proxyMiddleware = app.get(ProxyMiddleware);
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    void proxyMiddleware.use(req, res, next);
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),

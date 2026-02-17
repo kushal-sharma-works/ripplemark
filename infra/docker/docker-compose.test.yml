@@ -15,7 +15,7 @@ services:
 
   nats:
     volumes: !reset []
-    command: ["-js", "-sd", "/tmp/nats"]
+    command: ["-js", "-sd", "/tmp/nats", "-m", "8222"]
 
   topology-service:
     environment:

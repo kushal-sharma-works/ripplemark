@@ -5,8 +5,9 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock* /app/
+COPY README.md /app/
 
-RUN uv sync --frozen --no-dev
+RUN uv sync --no-dev
 
 COPY registry /app/registry
 
@@ -21,9 +22,10 @@ RUN useradd -m appuser
 COPY --from=builder /app /app
 
 ENV PYTHONPATH=/app/registry
+ENV PATH="/app/.venv/bin:${PATH}"
 
 USER appuser
 
-EXPOSE 8002
+EXPOSE 8000
 
-CMD ["uv", "run", "gunicorn", "registry.wsgi:application", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8002"]
+CMD ["gunicorn", "registry.wsgi:application", "--bind", "0.0.0.0:8000"]

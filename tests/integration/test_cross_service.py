@@ -20,7 +20,7 @@ def test_register_service_and_verify_topology(
         "id": service_id,
         "name": service_id,
         "version": "1.0.0",
-        "type": "api",
+        "type": "sync",
         "metadata": {"team": "platform"},
     }
 
@@ -70,7 +70,7 @@ def test_dependency_and_transitive_query(
     for sid in [a, b, c]:
         response = http_client.post(
             f"{base_urls['topology']}/api/v1/ingestion/services",
-            json={"id": sid, "name": sid, "version": "1.0.0", "type": "api", "metadata": {}},
+            json={"id": sid, "name": sid, "version": "1.0.0", "type": "sync", "metadata": {}},
             headers=headers,
         )
         assert response.status_code in (200, 201)
@@ -118,20 +118,54 @@ def test_change_proposal_impact_analysis(
     base_urls: dict[str, str],
     auth_access_token: str,
 ):
-    response = http_client.post(
-        f"{base_urls['analysis']}/analysis/impact",
-        json={
-            "service_name": "auth-gateway",
-            "change_type": "schema_change",
-            "details": "integration-change",
-            "max_depth": 5,
-        },
-        headers=_auth_headers(auth_access_token),
+    source = f"analysis-src-{uuid.uuid4().hex[:6]}"
+    target = f"analysis-dst-{uuid.uuid4().hex[:6]}"
+    headers = _auth_headers(auth_access_token)
+
+    for sid in [source, target]:
+        created = http_client.post(
+            f"{base_urls['topology']}/api/v1/ingestion/services",
+            json={"id": sid, "name": sid, "version": "1.0.0", "type": "sync", "metadata": {}},
+            headers=headers,
+        )
+        assert created.status_code in (200, 201)
+
+    dependency_created = http_client.post(
+        f"{base_urls['topology']}/api/v1/ingestion/dependencies",
+        json={"source": source, "target": target, "type": "http"},
+        headers=headers,
     )
-    assert response.status_code in (200, 201)
-    payload = response.json()
-    assert "risk_score" in payload
-    assert "affected_services" in payload
+    assert dependency_created.status_code in (200, 201)
+
+    try:
+        response = http_client.post(
+            f"{base_urls['analysis']}/analysis/impact",
+            json={
+                "service_name": source,
+                "change_type": "schema_change",
+                "details": "integration-change",
+                "max_depth": 5,
+            },
+            headers=headers,
+        )
+        assert response.status_code in (200, 201)
+        payload = response.json()
+        assert "risk_score" in payload
+        assert "affected_services" in payload
+        assert target in payload["affected_services"]
+    finally:
+        http_client.delete(
+            f"{base_urls['topology']}/api/v1/ingestion/dependencies/{source}/{target}/http",
+            headers=headers,
+        )
+        http_client.delete(
+            f"{base_urls['topology']}/api/v1/ingestion/services/{source}",
+            headers=headers,
+        )
+        http_client.delete(
+            f"{base_urls['topology']}/api/v1/ingestion/services/{target}",
+            headers=headers,
+        )
 
 
 def test_auth_login_refresh_logout_flow(http_client, base_urls: dict[str, str], auth_credentials: dict[str, str]):

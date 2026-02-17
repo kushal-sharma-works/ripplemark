@@ -22,6 +22,22 @@ def base_urls() -> dict[str, str]:
     }
 
 
+def _wait_for_service(url: str, timeout_seconds: int = 120) -> None:
+    deadline = time.time() + timeout_seconds
+    last_error: Exception | None = None
+
+    while time.time() < deadline:
+        try:
+            response = httpx.get(url, timeout=3.0)
+            if response.status_code < 500:
+                return
+        except Exception as exc:
+            last_error = exc
+        time.sleep(2)
+
+    raise RuntimeError(f"Service did not become ready: {url}. Last error: {last_error}")
+
+
 @pytest.fixture(scope="session", autouse=True)
 def compose_environment() -> Generator[None, None, None]:
     if os.getenv("INTEGRATION_MANAGE_COMPOSE", "0") != "1":
@@ -30,6 +46,14 @@ def compose_environment() -> Generator[None, None, None]:
 
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     docker_dir = os.path.join(root, "infra", "docker")
+    env_file = os.path.join(docker_dir, ".env")
+    env_example = os.path.join(docker_dir, ".env.example")
+    if not os.path.exists(env_file) and os.path.exists(env_example):
+        with open(env_example, "r", encoding="utf-8") as source, open(
+            env_file, "w", encoding="utf-8"
+        ) as target:
+            target.write(source.read())
+
     up_cmd = [
         "docker",
         "compose",
@@ -53,8 +77,11 @@ def compose_environment() -> Generator[None, None, None]:
     ]
 
     subprocess.run(up_cmd, cwd=docker_dir, check=True)
-    time.sleep(10)
     try:
+        _wait_for_service("http://localhost:3000/health")
+        _wait_for_service("http://localhost:3001/health")
+        _wait_for_service("http://localhost:8000/health/live")
+        _wait_for_service("http://localhost:8001/health/live")
         yield
     finally:
         subprocess.run(down_cmd, cwd=docker_dir, check=False)

@@ -11,7 +11,7 @@ COPY tsconfig*.json ./
 COPY nest-cli.json ./
 
 # Install dependencies (including dev dependencies for building)
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 # Copy source code
 COPY src ./src
@@ -20,7 +20,7 @@ COPY src ./src
 RUN npm run build
 
 # Prune dev dependencies
-RUN npm prune --production
+RUN npm prune --omit=dev --legacy-peer-deps
 
 # Stage 2: Production
 FROM node:20-alpine AS production

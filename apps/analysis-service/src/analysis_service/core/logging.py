@@ -4,9 +4,10 @@ from typing import Any
 
 import structlog
 from opentelemetry import trace
+from structlog.types import EventDict, WrappedLogger
 
 
-def add_trace_context(_, __, event_dict: dict[str, Any]) -> dict[str, Any]:
+def add_trace_context(_: WrappedLogger, __: str, event_dict: EventDict) -> EventDict:
     span = trace.get_current_span()
     span_context = span.get_span_context() if span else None
     if span_context and span_context.is_valid:

@@ -1,14 +1,12 @@
 from __future__ import annotations
 
+import os
+
 from django.db import connection
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_GET
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 import redis
-import environ
-
-
-env = environ.Env()
 
 
 @require_GET
@@ -24,12 +22,14 @@ def ready(request):
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
-            db_ok = cursor.fetchone()[0] == 1
+            row = cursor.fetchone()
+            db_ok = bool(row and row[0] == 1)
     except Exception:
         db_ok = False
 
     try:
-        redis_client = redis.from_url(env("REDIS_URL", default="redis://localhost:6379"))
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+        redis_client = redis.from_url(redis_url)
         redis_ok = bool(redis_client.ping())
     except Exception:
         redis_ok = False

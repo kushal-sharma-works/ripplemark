@@ -48,13 +48,13 @@ services:
 
   nats:
     image: nats:2.10
-    command: ["-js"]
+    command: ["-js", "-m", "8222"]
     ports:
       - "${NATS_PORT}:4222"
     volumes:
       - nats_data:/data
     healthcheck:
-      test: ["CMD", "nats", "server", "check", "--server=nats://localhost:4222"]
+      test: ["CMD", "nats-server", "-v"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -65,7 +65,7 @@ services:
       context: ../../apps/topology-service
     environment:
       PORT: ${TOPOLOGY_PORT}
-      MONGODB_URI: mongodb://mongodb:27017/${MONGO_INITDB_DATABASE}
+      MONGO_URI: mongodb://mongodb:27017/${MONGO_INITDB_DATABASE}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       NATS_URL: nats://nats:4222
@@ -90,7 +90,7 @@ services:
       context: ../../apps/analysis-service
     environment:
       PORT: ${ANALYSIS_PORT}
-      TOPOLOGY_BASE_URL: http://topology-service:${TOPOLOGY_PORT}
+      TOPOLOGY_SERVICE_URL: http://topology-service:${TOPOLOGY_PORT}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       NATS_URL: nats://nats:4222
@@ -104,7 +104,13 @@ services:
       nats:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=3)",
+        ]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -128,7 +134,13 @@ services:
       nats:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=3)",
+        ]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -142,6 +154,11 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
+      OAUTH_GOOGLE_CLIENT_ID: ${OAUTH_GOOGLE_CLIENT_ID:-integration-google-client}
+      OAUTH_GOOGLE_CLIENT_SECRET: ${OAUTH_GOOGLE_CLIENT_SECRET:-integration-google-secret}
+      OAUTH_GOOGLE_CALLBACK_URL: ${OAUTH_GOOGLE_CALLBACK_URL:-http://localhost:4200/api/auth/oauth/google/callback}
+      WEB_APP_URL: ${WEB_APP_URL:-http://localhost:4200}
+      REGISTRY_PROXY_TOKEN: ${REGISTRY_PROXY_TOKEN:-localuidemoproxytoken1234567890abcdef12}
       TOPOLOGY_SERVICE_URL: http://topology-service:${TOPOLOGY_PORT}
       ANALYSIS_SERVICE_URL: http://analysis-service:8000
       REGISTRY_SERVICE_URL: http://registry-service:8000

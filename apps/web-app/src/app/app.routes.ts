@@ -11,6 +11,11 @@ export const routes: Routes = [
 				path: '',
 				loadComponent: () => import('./features/auth/login.page').then((m) => m.LoginPage),
 			},
+			{
+				path: 'google-callback',
+				loadComponent: () =>
+					import('./features/auth/google-callback.page').then((m) => m.GoogleCallbackPage),
+			},
 		],
 	},
 	{

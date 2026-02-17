@@ -25,6 +25,71 @@ export class AuthService {
 
   constructor(private readonly http: HttpClient) {}
 
+  private decodeJwtPayload(token: string): Record<string, unknown> | null {
+    try {
+      const payloadPart = token.split('.')[1];
+      if (!payloadPart) return null;
+
+      const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+      const decoded = atob(padded);
+      return JSON.parse(decoded) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  async login(email: string, password: string): Promise<void> {
+    const response = await firstValueFrom(
+      this.http.post<{ accessToken: string; refreshToken: string }>('/api/auth/login', {
+        email,
+        password,
+      }),
+    );
+
+    const payload = this.decodeJwtPayload(response.accessToken);
+    const userId = typeof payload?.['sub'] === 'string' ? payload['sub'] : '';
+    const userEmail = typeof payload?.['email'] === 'string' ? payload['email'] : email;
+    const userRoles = Array.isArray(payload?.['roles'])
+      ? payload['roles'].filter((role): role is string => typeof role === 'string')
+      : [];
+
+    this.state.set({
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+      user: {
+        id: userId,
+        email: userEmail,
+        roles: userRoles,
+      },
+    });
+  }
+
+  completeOAuthLogin(accessToken: string, refreshToken: string): boolean {
+    const payload = this.decodeJwtPayload(accessToken);
+    const userId = typeof payload?.['sub'] === 'string' ? payload['sub'] : '';
+    const userEmail = typeof payload?.['email'] === 'string' ? payload['email'] : '';
+    const userRoles = Array.isArray(payload?.['roles'])
+      ? payload['roles'].filter((role): role is string => typeof role === 'string')
+      : [];
+
+    if (!userId || !userEmail) {
+      return false;
+    }
+
+    this.state.set({
+      accessToken,
+      refreshToken,
+      user: {
+        id: userId,
+        email: userEmail,
+        roles: userRoles,
+      },
+    });
+
+    return true;
+  }
+
   setSession(payload: AuthState): void {
     this.state.set(payload);
   }

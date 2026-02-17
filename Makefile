@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: dev test lint build clean
+.PHONY: dev test lint build smoke clean
 
 dev:
 	cd infra/docker && cp -n .env.example .env || true && docker compose -f docker-compose.yml up --build
@@ -26,6 +26,17 @@ build:
 	docker build -t ripplemark/analysis-service:local apps/analysis-service
 	docker build -t ripplemark/registry-service:local apps/registry-service
 	docker build -t ripplemark/web-app:local apps/web-app
+
+smoke:
+	curl -fsS http://localhost:3000/health > /dev/null
+	curl -fsS http://localhost:3001/health > /dev/null
+	curl -fsS http://localhost:8000/health/live > /dev/null
+	curl -fsS http://localhost:8001/health/live > /dev/null
+	curl -fsS http://localhost:3000/metrics > /dev/null
+	curl -fsS http://localhost:3001/metrics > /dev/null
+	curl -fsS http://localhost:8000/health/metrics > /dev/null
+	curl -fsS http://localhost:8001/metrics > /dev/null
+	@echo "Smoke checks passed"
 
 clean:
 	cd infra/docker && docker compose -f docker-compose.yml -f docker-compose.test.yml down -v --remove-orphans

@@ -1,8 +1,10 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TableModule } from 'primeng/table';
 import { InputTextModule } from 'primeng/inputtext';
+import { firstValueFrom } from 'rxjs';
+import { ApiService } from '../../core/services/api.service';
 import { ServiceTypeBadgeComponent } from '../../shared/components/service-type-badge.component';
 import { PaginationComponent } from '../../shared/components/pagination.component';
 
@@ -38,12 +40,44 @@ import { PaginationComponent } from '../../shared/components/pagination.componen
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RegistryPage {
+  private readonly api = inject(ApiService);
+
   readonly search = signal('');
-  readonly rows = signal([
-    { id: 'auth-gateway', name: 'auth-gateway', type: 'api', team: 'platform', status: 'healthy' },
-    { id: 'registry-service', name: 'registry-service', type: 'database', team: 'platform', status: 'healthy' },
-    { id: 'web-app', name: 'web-app', type: 'frontend', team: 'ui', status: 'healthy' },
-  ]);
+  readonly rows = signal<Array<{ id: string; name: string; type: string; team: string; status: string }>>([]);
+
+  constructor() {
+    void this.loadRegistry();
+  }
+
+  private async loadRegistry(): Promise<void> {
+    try {
+      const [services, ownerships, teams] = await Promise.all([
+        firstValueFrom(this.api.get<Array<{ id: string; name: string; service_type: string; status: string }>>('/api/registry/services/')),
+        firstValueFrom(this.api.get<Array<{ service: string; team: string; ownership_type: string }>>('/api/registry/ownerships/')),
+        firstValueFrom(this.api.get<Array<{ id: string; name: string }>>('/api/registry/teams/')),
+      ]);
+
+      const teamNameById = new Map((teams ?? []).map((team) => [team.id, team.name]));
+      const teamByService = new Map<string, string>();
+      for (const ownership of ownerships ?? []) {
+        if (ownership.ownership_type === 'primary' && ownership.service && ownership.team) {
+          teamByService.set(ownership.service, teamNameById.get(ownership.team) ?? 'unknown');
+        }
+      }
+
+      this.rows.set(
+        (services ?? []).map((service) => ({
+          id: service.id,
+          name: service.name,
+          type: service.service_type,
+          team: teamByService.get(service.id) ?? 'unassigned',
+          status: service.status,
+        })),
+      );
+    } catch {
+      this.rows.set([]);
+    }
+  }
 
   filtered() {
     const q = this.search().toLowerCase().trim();

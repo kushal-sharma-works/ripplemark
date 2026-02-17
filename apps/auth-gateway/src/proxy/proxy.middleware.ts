@@ -12,16 +12,18 @@ export class ProxyMiddleware implements NestMiddleware {
   private readonly analysisProxy;
   private readonly registryProxy;
   private readonly jwtService: JwtService;
+  private readonly registryProxyToken?: string;
 
   constructor(config: ConfigService) {
     this.jwtService = new JwtService({ secret: config.getOrThrow<string>('JWT_SECRET') });
+    this.registryProxyToken = config.get<string>('REGISTRY_PROXY_TOKEN');
 
     const enrichHeaders = (req: ClaimRequest) => ({
       'X-User-Id': req.user?.sub ?? '',
       'X-User-Roles': (req.user?.roles ?? []).join(','),
       'X-User-Teams': (req.user?.teams ?? []).join(','),
-      traceparent: String(req.headers['traceparent'] ?? ''),
-      tracestate: String(req.headers['tracestate'] ?? ''),
+      traceparent: String(req.headers?.['traceparent'] ?? ''),
+      tracestate: String(req.headers?.['tracestate'] ?? ''),
     });
 
     this.topologyProxy = createProxyMiddleware({
@@ -39,6 +41,7 @@ export class ProxyMiddleware implements NestMiddleware {
     this.analysisProxy = createProxyMiddleware({
       target: config.getOrThrow<string>('ANALYSIS_SERVICE_URL'),
       changeOrigin: true,
+      pathRewrite: { '^/api/analysis': '/analysis' },
       on: {
         proxyReq: (proxyReq, req: ClaimRequest) => {
           const headers = enrichHeaders(req);
@@ -50,10 +53,14 @@ export class ProxyMiddleware implements NestMiddleware {
     this.registryProxy = createProxyMiddleware({
       target: config.getOrThrow<string>('REGISTRY_SERVICE_URL'),
       changeOrigin: true,
+      pathRewrite: { '^/api/registry': '/api' },
       on: {
         proxyReq: (proxyReq, req: ClaimRequest) => {
           const headers = enrichHeaders(req);
           Object.entries(headers).forEach(([key, value]) => proxyReq.setHeader(key, value));
+          if (this.registryProxyToken) {
+            proxyReq.setHeader('Authorization', `Token ${this.registryProxyToken}`);
+          }
         },
       },
     });

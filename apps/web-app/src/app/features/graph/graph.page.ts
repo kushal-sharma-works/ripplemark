@@ -1,8 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { InputTextModule } from 'primeng/inputtext';
 import { CardModule } from 'primeng/card';
+import { firstValueFrom } from 'rxjs';
 import { WebSocketService } from '../../core/services/websocket.service';
+import { ApiService } from '../../core/services/api.service';
+import { DependencyEdge, ServiceNode } from '../../core/services/models';
 import { GraphCanvasComponent } from './graph-canvas.component';
 
 @Component({
@@ -31,19 +34,11 @@ import { GraphCanvasComponent } from './graph-canvas.component';
 })
 export class GraphPage {
   private readonly socket = inject(WebSocketService);
+  private readonly api = inject(ApiService);
 
   readonly search = signal('');
-  readonly nodes = signal([
-    { id: 'auth-gateway', name: 'auth-gateway', type: 'api', team: 'platform', status: 'healthy', version: '1.0.0' },
-    { id: 'analysis-service', name: 'analysis-service', type: 'worker', team: 'platform', status: 'healthy', version: '1.0.0' },
-    { id: 'registry-service', name: 'registry-service', type: 'database', team: 'platform', status: 'healthy', version: '1.0.0' },
-    { id: 'web-app', name: 'web-app', type: 'frontend', team: 'ui', status: 'healthy', version: '1.0.0' },
-  ] as any[]);
-  readonly edges = signal([
-    { source: 'web-app', target: 'auth-gateway', type: 'sync' },
-    { source: 'auth-gateway', target: 'analysis-service', type: 'async' },
-    { source: 'auth-gateway', target: 'registry-service', type: 'sync' },
-  ] as any[]);
+  readonly nodes = signal<ServiceNode[]>([]);
+  readonly edges = signal<DependencyEdge[]>([]);
 
   readonly filteredNodes = computed(() => {
     const term = this.search().toLowerCase().trim();
@@ -58,5 +53,55 @@ export class GraphPage {
 
   constructor() {
     this.socket.connect();
+
+    effect(() => {
+      const update = this.socket.graphUpdate();
+      if (!update) return;
+      void this.loadGraph();
+    });
+
+    void this.loadGraph();
+  }
+
+  private async loadGraph(): Promise<void> {
+    try {
+      const response = await firstValueFrom(
+        this.api.get<{ success: boolean; data: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> } }>(
+          '/api/topology/query/export',
+        ),
+      );
+
+      const nodes = (response.data?.nodes ?? []).map((node) => {
+        const metadata = (node['metadata'] ?? {}) as Record<string, unknown>;
+        const type = node['type'] === 'async' ? 'async' : 'sync';
+
+        return {
+          id: String(node['id'] ?? ''),
+          name: String(node['name'] ?? node['id'] ?? ''),
+          type,
+          version: String(node['version'] ?? 'unknown'),
+          metadata,
+          team: typeof metadata['team'] === 'string' ? metadata['team'] : 'unknown',
+          status: typeof metadata['status'] === 'string' && ['healthy', 'degraded', 'down'].includes(metadata['status'])
+            ? (metadata['status'] as 'healthy' | 'degraded' | 'down')
+            : 'healthy',
+        } satisfies ServiceNode;
+      });
+
+      const edges = (response.data?.edges ?? []).map((edge) => ({
+        source: String(edge['source'] ?? ''),
+        target: String(edge['target'] ?? ''),
+        type:
+          edge['type'] === 'grpc' || edge['type'] === 'event' || edge['type'] === 'http'
+            ? (edge['type'] as 'grpc' | 'event' | 'http')
+            : 'http',
+      })) satisfies DependencyEdge[];
+
+      this.nodes.set(nodes);
+      this.edges.set(edges);
+    } catch {
+      this.nodes.set([]);
+      this.edges.set([]);
+    }
   }
 }
