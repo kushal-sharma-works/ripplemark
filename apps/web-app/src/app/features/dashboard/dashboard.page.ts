@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { CardModule } from 'primeng/card';
-import { ApiService } from '../../core/services/api.service';
+import { ApiService, PaginatedResponse } from '../../core/services/api.service';
 
 @Component({
   standalone: true,
@@ -66,8 +66,10 @@ export class DashboardPage {
     }
 
     try {
-      const snapshots = await firstValueFrom(this.api.get<Array<Record<string, unknown>>>('/api/registry/snapshots/'));
-      this.recentChanges.set(Array.isArray(snapshots) ? snapshots.length : 0);
+      const snapshots = await firstValueFrom(
+        this.api.get<PaginatedResponse<Record<string, unknown>> | Array<Record<string, unknown>>>('/api/registry/snapshots/'),
+      );
+      this.recentChanges.set(this.api.extractCollection(snapshots).length);
       this.systemHealth.set('healthy');
     } catch {
       this.recentChanges.set(0);

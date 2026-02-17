@@ -4,7 +4,7 @@ import { RouterLink } from '@angular/router';
 import { TableModule } from 'primeng/table';
 import { InputTextModule } from 'primeng/inputtext';
 import { firstValueFrom } from 'rxjs';
-import { ApiService } from '../../core/services/api.service';
+import { ApiService, PaginatedResponse } from '../../core/services/api.service';
 import { ServiceTypeBadgeComponent } from '../../shared/components/service-type-badge.component';
 import { PaginationComponent } from '../../shared/components/pagination.component';
 
@@ -52,21 +52,31 @@ export class RegistryPage {
   private async loadRegistry(): Promise<void> {
     try {
       const [services, ownerships, teams] = await Promise.all([
-        firstValueFrom(this.api.get<Array<{ id: string; name: string; service_type: string; status: string }>>('/api/registry/services/')),
-        firstValueFrom(this.api.get<Array<{ service: string; team: string; ownership_type: string }>>('/api/registry/ownerships/')),
-        firstValueFrom(this.api.get<Array<{ id: string; name: string }>>('/api/registry/teams/')),
+        firstValueFrom(
+          this.api.get<PaginatedResponse<{ id: string; name: string; service_type: string; status: string }> | Array<{ id: string; name: string; service_type: string; status: string }>>('/api/registry/services/'),
+        ),
+        firstValueFrom(
+          this.api.get<PaginatedResponse<{ service: string; team: string; ownership_type: string }> | Array<{ service: string; team: string; ownership_type: string }>>('/api/registry/ownerships/'),
+        ),
+        firstValueFrom(
+          this.api.get<PaginatedResponse<{ id: string; name: string }> | Array<{ id: string; name: string }>>('/api/registry/teams/'),
+        ),
       ]);
 
-      const teamNameById = new Map((teams ?? []).map((team) => [team.id, team.name]));
+      const serviceRows = this.api.extractCollection(services);
+      const ownershipRows = this.api.extractCollection(ownerships);
+      const teamRows = this.api.extractCollection(teams);
+
+      const teamNameById = new Map(teamRows.map((team) => [team.id, team.name]));
       const teamByService = new Map<string, string>();
-      for (const ownership of ownerships ?? []) {
+      for (const ownership of ownershipRows) {
         if (ownership.ownership_type === 'primary' && ownership.service && ownership.team) {
           teamByService.set(ownership.service, teamNameById.get(ownership.team) ?? 'unknown');
         }
       }
 
       this.rows.set(
-        (services ?? []).map((service) => ({
+        serviceRows.map((service) => ({
           id: service.id,
           name: service.name,
           type: service.service_type,

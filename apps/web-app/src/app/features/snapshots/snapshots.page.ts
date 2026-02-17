@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { DropdownModule } from 'primeng/dropdown';
 import { CardModule } from 'primeng/card';
 import { firstValueFrom } from 'rxjs';
-import { ApiService } from '../../core/services/api.service';
+import { ApiService, PaginatedResponse } from '../../core/services/api.service';
 
 @Component({
   standalone: true,
@@ -72,10 +72,14 @@ export class SnapshotsPage {
   private async loadSnapshots(): Promise<void> {
     try {
       const snapshots = await firstValueFrom(
-        this.api.get<Array<{ id: string; captured_at: string; notes: string }>>('/api/registry/snapshots/'),
+        this.api.get<
+          PaginatedResponse<{ id: string; captured_at: string; notes: string }> | Array<{ id: string; captured_at: string; notes: string }>
+        >('/api/registry/snapshots/'),
       );
 
-      const options = (snapshots ?? []).map((snapshot) => ({
+      const snapshotRows = this.api.extractCollection(snapshots);
+
+      const options = snapshotRows.map((snapshot) => ({
         label: `${new Date(snapshot.captured_at).toLocaleString()}${snapshot.notes ? ` — ${snapshot.notes}` : ''}`,
         value: snapshot.id,
       }));
