@@ -17,17 +17,17 @@ describe('DashboardPage', () => {
     fixture = TestBed.createComponent(DashboardPage);
     fixture.detectChanges();
 
-    const requests = httpTestingController.match(() => true);
-    requests.forEach((request) => {
-      if (request.request.url.includes('/api/topology/query/statistics')) {
-        request.flush({ success: true, data: { nodeCount: 3, edgeCount: 2 } });
-        return;
-      }
+    const statisticsRequest = httpTestingController.expectOne((request) =>
+      request.url.includes('/api/topology/query/statistics'),
+    );
+    statisticsRequest.flush({ success: true, data: { nodeCount: 3, edgeCount: 2 } });
 
-      if (request.request.url.includes('/api/registry/snapshots/')) {
-        request.flush({ success: true, data: [] });
-      }
-    });
+    await fixture.whenStable();
+
+    const snapshotsRequest = httpTestingController.expectOne((request) =>
+      request.url.includes('/api/registry/snapshots'),
+    );
+    snapshotsRequest.flush({ success: true, data: [] });
   });
 
   afterEach(() => {
