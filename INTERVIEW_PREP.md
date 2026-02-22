@@ -25,7 +25,10 @@
 16. [Environment Variables Reference](#16-environment-variables-reference)
 17. [Gotcha & Trick Questions](#17-gotcha--trick-questions)
 18. [Behavioural & Soft‑Skill Questions](#18-behavioural--soft-skill-questions)
-19. [File‑by‑File Walkthrough](#19-file-by-file-walkthrough)
+19. [Shared UI Components & Directives](#19-shared-ui-components--directives)
+20. [Kubernetes Production Hardening](#20-kubernetes-production-hardening)
+21. [OpenTelemetry & Structured Logging](#21-opentelemetry--structured-logging)
+22. [File‑by‑File Walkthrough](#22-file-by-file-walkthrough)
 
 ---
 
@@ -1699,7 +1702,378 @@ Migration: `1730000000000-init-users` creates this table.
 
 ---
 
-## 19. File‑by‑File Walkthrough
+## 19. Shared UI Components & Directives
+
+### Q: What reusable UI components exist in the Angular app?
+
+**A:** Six standalone shared components in `shared/components/`:
+
+| Component | Purpose | Key Angular Feature |
+|---|---|---|
+| `ConfirmDialogComponent` | Modal with Cancel/Confirm buttons | `model()` for two‑way `visible` binding, `output()` for decision |
+| `EmptyStateComponent` | "No data" placeholder with icon | `input()` for configurable message |
+| `LoadingSpinnerComponent` | Centred spinner | PrimeNG `ProgressSpinner` wrapper |
+| `PaginationComponent` | Page navigator | PrimeNG `Paginator`, emits `PaginatorState` via `output()` |
+| `RiskScoreBadgeComponent` | Colour‑coded risk tag (green/yellow/red) | `computed()` maps score → severity (`≥75 = danger`, `≥40 = warn`, else `success`) |
+| `ServiceTypeBadgeComponent` | Colour‑coded service type tag | `computed()` maps type → colour (`api = info`, `database = danger`, etc.) |
+
+All use `ChangeDetectionStrategy.OnPush` for performance.
+
+---
+
+### Q: What custom directives exist?
+
+**A:** Two standalone attribute directives in `shared/directives/`:
+
+| Directive | Selector | What it does |
+|---|---|---|
+| `ClickOutsideDirective` | `[appClickOutside]` | Listens to `document:click`, emits `clickOutside` event when user clicks outside the host element. Used for closing dropdowns and modals. |
+| `InfiniteScrollDirective` | `[appInfiniteScroll]` | Listens to the host element's `scroll` event, emits `reachedBottom` when scroll position is within 30 px of the bottom. Used for lazy‑loading list pages. |
+
+---
+
+### Q: What is the CriticalPreloadStrategy?
+
+**A:** A custom Angular `PreloadingStrategy` in `core/routing/critical-preload.strategy.ts`:
+
+- Checks each route's `data.preload` flag.
+- If `true`, preloads the lazy module immediately after initial load.
+- If `false` or absent, does nothing (loads on demand).
+- Dashboard and Graph pages are marked `preload: true` because they are the most‑visited pages.
+
+Registered via `provideRouter(routes, withPreloading(CriticalPreloadStrategy))` in `app.config.ts`.
+
+---
+
+### Q: What is the ThemeService?
+
+**A:** `ThemeService` in `core/services/theme.service.ts`:
+
+1. Stores the theme mode (`'light'` or `'dark'`) in a `signal`.
+2. On init, reads `localStorage('ripplemark-theme')` to persist the user's choice.
+3. An `effect()` toggles the `dark` CSS class on `<html>` and writes back to `localStorage`.
+4. `toggle()` flips the mode.
+5. PrimeNG's Aura theme supports dark mode via the CSS class selector configured in `app.config.ts`: `darkModeSelector: '.dark'`.
+
+---
+
+### Q: What does `models.ts` define?
+
+**A:** `core/services/models.ts` is the **single source of truth for frontend TypeScript interfaces**:
+
+- `ServiceNode` — id, name, type (`sync`/`async`), version, metadata, team, status.
+- `DependencyEdge` — source, target, type (`http`/`grpc`/`event`).
+- `GraphSnapshot` — nodes + edges array.
+- `DashboardOverview` — totalServices, totalDependencies, recentChanges, systemHealth.
+- `ChangeProposal` — serviceName, changeType, description, maxDepth.
+- `ImpactResult` — affectedServices (with score and reason), riskScore, backwardCompatibility.
+- `TeamSummary` — id, name, members count, serviceCount.
+
+---
+
+### Q: What does the `environment.ts` file do?
+
+**A:** Defines runtime configuration for the Angular app:
+
+```typescript
+export const environment = {
+  apiBaseUrl: '/api',           // All API calls prefix
+  topologyWsUrl: 'http://localhost:3001/graph',  // WebSocket endpoint
+};
+```
+
+In production, the Nginx reverse proxy handles `/api/` routing, so the same code works without changes.
+
+---
+
+### Q: Explain the `nginx.conf` for the web app.
+
+**A:** Three rules:
+
+1. `location /` → `try_files $uri $uri/ /index.html` — SPA fallback: all routes serve `index.html` so Angular Router handles them client‑side.
+2. `location /api/auth/` → rewrites the path and proxies to `auth-gateway:3000`. Strips the `/api/auth/` prefix.
+3. `location /api/` → proxies everything else to `auth-gateway:3000`. The auth gateway then decides which downstream service to forward to.
+
+---
+
+### Q: What does `app.config.ts` configure?
+
+**A:** The Angular application bootstrap configuration:
+
+```
+provideExperimentalZonelessChangeDetection()  → No Zone.js, signals drive rendering
+provideAnimationsAsync()                       → Async animation imports
+provideRouter(routes, CriticalPreloadStrategy) → Lazy loading with selective preloading
+provideHttpClient(authToken, refreshToken)     → Both interceptors registered
+providePrimeNG({ theme: Aura, dark: '.dark' }) → PrimeNG theme with dark mode support
+```
+
+---
+
+## 20. Kubernetes Production Hardening
+
+### Q: What Kubernetes security policies are configured?
+
+**A:** Three layers:
+
+1. **Namespace** (`k8s/namespace.yaml`) — created with `pod-security.kubernetes.io/enforce: restricted`, which blocks privileged containers, host networking, and root users.
+
+2. **NetworkPolicy** (`k8s/network-policy.yaml`):
+   - **Ingress**: only allows traffic from pods within the `ripplemark` namespace and the `ingress-nginx` namespace.
+   - **Egress**: allows DNS (port 53), HTTPS (443), PostgreSQL (5432), MongoDB (27017), Redis (6379), and NATS (4222). Everything else is blocked.
+
+3. **ResourceQuotas** (`k8s/resource-quotas.yaml`):
+   - CPU: 6 cores request / 12 cores limit.
+   - Memory: 8 Gi request / 16 Gi limit.
+   - Max 120 pods, 30 services, 20 PVCs.
+
+---
+
+### Q: What are PodDisruptionBudgets?
+
+**A:** Every service's Helm chart includes a `PodDisruptionBudget` (PDB) with `minAvailable: 1`. This tells Kubernetes: "during voluntary disruptions (node drains, upgrades), always keep at least one pod running." Prevents downtime during cluster maintenance.
+
+---
+
+### Q: What Prometheus monitoring is configured?
+
+**A:**
+
+**ServiceMonitors** (one per service in `k8s/prometheus/`):
+- `servicemonitor-topology.yaml` — scrapes `/metrics` on port `http` every 30 s.
+- `servicemonitor-analysis.yaml`, `servicemonitor-auth.yaml`, `servicemonitor-registry.yaml`, `servicemonitor-web.yaml` — same pattern.
+
+**Alert Rules** (`k8s/prometheus/prometheus-rules.yaml`):
+
+| Alert | Condition | Severity |
+|---|---|---|
+| `ServiceDown` | Service unreachable for 5 min | 🔴 Critical |
+| `HighP95Latency` | p95 latency > 1 s for 10 min | 🟡 Warning |
+| `HighErrorRate` | 5xx error rate > 5% for 10 min | 🔴 Critical |
+| `HighPodRestarts` | ≥ 3 restarts in 10 min | 🟡 Warning |
+
+---
+
+### Q: What Grafana dashboards are pre‑built?
+
+**A:** Three JSON dashboards in `k8s/grafana/`:
+
+| Dashboard | What it shows |
+|---|---|
+| `dependency-health.json` | Stat panels for PostgreSQL, MongoDB, Redis, NATS health status |
+| `red-metrics.json` | Rate (RPS), Errors (5xx %), Duration (latency) — the RED method |
+| `service-overview.json` | Request throughput (RPS) and p95 latency per service |
+
+These are importable into any Grafana instance via JSON import.
+
+---
+
+### Q: What is the ArgoCD ApplicationSet?
+
+**A:** `infra/argocd/applicationset.yaml` uses a **matrix generator** to deploy all five services across multiple environments (dev, sit, staging, prod):
+
+- Each combination of `(service, environment)` generates an ArgoCD `Application`.
+- Source: `infra/helm/<service>` with values from `values-<env>.yaml`.
+- Auto‑sync is enabled with pruning and self‑healing.
+- Individual app manifests in `infra/argocd/apps/<env>/` can override defaults.
+
+---
+
+### Q: What is the umbrella Helm chart?
+
+**A:** `infra/helm/ripplemark/Chart.yaml` is a **parent chart** that bundles all five service charts as dependencies:
+
+```yaml
+dependencies:
+  - name: topology-service    (v0.1.0)
+  - name: analysis-service    (v0.1.0)
+  - name: registry-service    (v0.1.0)
+  - name: auth-gateway        (v0.1.0)
+  - name: web-app             (v0.1.0)
+```
+
+Running `helm install ripplemark ./infra/helm/ripplemark` deploys the entire platform in one command. Environment‑specific overrides are in `values-dev.yaml`, `values-sit.yaml`, `values-staging.yaml`, `values-prod.yaml`.
+
+---
+
+### Q: What Helm template patterns are used?
+
+**A:** Each service chart includes:
+
+| Template | Purpose |
+|---|---|
+| `_helpers.tpl` | Shared template functions: fullname, labels, selector labels, service account |
+| `deployment.yaml` | Pod spec, probes, env from ConfigMap + Secret, resource limits, security context |
+| `service.yaml` | ClusterIP Service exposing the container port |
+| `ingress.yaml` | Optional Ingress with TLS and host rules |
+| `configmap.yaml` | Non‑secret environment variables |
+| `secret.yaml` | Sensitive values (DB passwords, JWT secrets) — base64 encoded |
+| `hpa.yaml` | HorizontalPodAutoscaler (e.g., 2–6 replicas, 75% CPU target) |
+| `poddisruptionbudget.yaml` | PDB with `minAvailable: 1` |
+
+Values files set replicas, image tags, resource requests/limits, probe paths, and environment‑specific URLs.
+
+---
+
+### Q: What does `docker-compose.test.yml` do differently from the main compose file?
+
+**A:** Test‑specific overrides:
+
+| Change | Why |
+|---|---|
+| PostgreSQL uses `tmpfs` storage | Fast, ephemeral — no disk I/O, wiped on stop |
+| MongoDB uses `tmpfs` storage | Same — tests run faster with in‑memory storage |
+| Redis uses `--save ""` (no persistence) | No RDB snapshots during tests |
+| NATS runs with `--jetstream=false` | Lighter memory footprint for tests |
+| Services get `NODE_ENV=test` | Activates test‑specific config (SQLite for Django, etc.) |
+
+Used by: `make smoke` and integration tests in CI.
+
+---
+
+### Q: What are the Helm values environments?
+
+**A:** Four environment tiers with progressively stricter settings:
+
+| File | Replicas | CPU | Memory | Notes |
+|---|---|---|---|---|
+| `values.yaml` (default/dev) | 1 | 100 m | 128 Mi | Minimal for local dev |
+| `values-sit.yaml` | 1 | 200 m | 256 Mi | System integration testing |
+| `values-staging.yaml` | 2 | 250 m | 512 Mi | Pre‑production mirror |
+| `values-prod.yaml` | 2–6 (HPA) | 500 m | 1 Gi | Production with autoscaling |
+
+---
+
+## 21. OpenTelemetry & Structured Logging
+
+### Q: How is OpenTelemetry configured in NestJS services?
+
+**A:** `observability/tracing.ts` (identical in auth‑gateway and topology‑service):
+
+1. Creates a `NodeSDK` with the service name.
+2. If `OTEL_EXPORTER_OTLP_ENDPOINT` is set, configures an `OTLPTraceExporter` pointing at `{endpoint}/v1/traces`.
+3. Enables auto‑instrumentations for HTTP, Express, MongoDB, and ioredis.
+4. Calls `sdk.start()` once (guards against double‑init with a `tracingStarted` flag).
+5. Called in `main.ts` **before** the NestJS app bootstraps.
+
+---
+
+### Q: How is OpenTelemetry configured in Python services?
+
+**A:** Two files per Python service:
+
+**`core/observability.py`** (analysis‑service and registry‑service):
+1. Creates a `TracerProvider` with the service name as a `Resource`.
+2. If `OTEL_EXPORTER_OTLP_ENDPOINT` is set, adds an `OTLPSpanExporter`.
+3. Instruments FastAPI/Django and HTTPX (outbound HTTP calls).
+
+**`core/logging.py`** (analysis‑service):
+1. Configures `structlog` with OpenTelemetry context processors.
+2. Adds `trace_id` and `span_id` to every log line automatically.
+3. Provides a `get_logger()` factory for consistent logger instances.
+
+---
+
+### Q: How do correlation IDs work across all services?
+
+**A:** Three implementations, same pattern:
+
+| Service | Implementation | Header |
+|---|---|---|
+| **NestJS (Topology)** | `CorrelationIdInterceptor` — NestJS interceptor | `X-Correlation-Id` |
+| **FastAPI (Analysis)** | `CorrelationIdMiddleware` — Starlette middleware using `contextvars` | `X-Correlation-Id` |
+| **Django (Registry)** | `CorrelationIdMiddleware` — Django middleware with OTel trace/span extraction | `X-Correlation-ID`, `X-Trace-Id`, `X-Span-Id` |
+
+All three generate a UUID if no correlation header is present, add it to the response, and include it in log output.
+
+---
+
+### Q: How is Pino logging configured in NestJS?
+
+**A:** `common/config/logger.config.ts` in the topology service:
+
+1. Uses `nestjs-pino` which wraps Pino.
+2. Log level from `LOG_LEVEL` env var (default: `info`).
+3. In non‑production: pretty‑printed with `pino-pretty`.
+4. In production: raw JSON (machine‑parseable).
+5. Injects OpenTelemetry `trace_id` and `span_id` into every log line via custom serializers.
+6. Excludes health‑check endpoints from access logs to reduce noise.
+
+---
+
+### Q: What Prometheus metrics exist in the Python services?
+
+**A:** `core/metrics.py` (shared between analysis and registry):
+
+| Metric | Type | Description |
+|---|---|---|
+| `analysis_risk_score_histogram` | Histogram | Distribution of risk scores (buckets: 0, 10, 20, … 100) |
+| `simulation_duration_seconds` | Histogram | How long failure simulations take |
+
+These are in addition to the NestJS metrics (`graph_node_count`, `graph_edge_count`, etc.) already covered.
+
+---
+
+### Q: What is the Swagger configuration?
+
+**A:** `common/config/swagger.config.ts` in the topology service:
+
+- Title: "Topology Service API"
+- Description: "Service dependency graph management"
+- Tags: `ingestion`, `query`, `health`
+- Server: `http://localhost:3001` (local dev)
+- Generated at `/api/docs` via `SwaggerModule.setup()` in `main.ts`.
+
+The auth gateway has equivalent Swagger setup for its own endpoints.
+
+---
+
+### Q: What is the Redis health indicator?
+
+**A:** `infrastructure/health/redis-health.indicator.ts` in the topology service:
+
+- Implements NestJS Terminus `HealthIndicator`.
+- Calls `redis.ping()` and reports `up` or `down`.
+- Used by the `/health/ready` endpoint — if Redis is down, the service reports "not ready" and is removed from the load balancer, but the process stays alive (liveness still passes).
+
+---
+
+### Q: Does the registry service have a Django admin?
+
+**A:** Yes — three admin registrations:
+
+| File | Models registered | Admin features |
+|---|---|---|
+| `services/admin.py` | Service, ServiceVersion, ServiceEndpoint | Inline version/endpoint editors, filtering by type/status |
+| `teams/admin.py` | Team, TeamMembership, ServiceOwnership | Custom list display with member counts |
+| `snapshots/admin.py` | DependencySnapshot | Display `captured_at`, node/edge counts |
+
+Accessible at `/admin/` in development. Useful for quick data inspection without API calls.
+
+---
+
+### Q: What is cursor pagination in the registry?
+
+**A:** `registry/pagination.py` defines `DefaultCursorPagination`:
+
+- **Strategy:** Cursor‑based (not offset‑based).
+- **Page size:** 50 results.
+- **Ordering:** By `-id` (newest first).
+- **Why cursor?** Offset pagination breaks when items are inserted/deleted between pages. Cursor pagination is stable because it uses a pointer to the last seen item.
+
+---
+
+### Q: What is the `asgi.py` file in the registry?
+
+**A:** Django's ASGI entry point (for async server support):
+
+1. Calls `setup_observability("registry-service")` to init OpenTelemetry.
+2. Returns the standard Django ASGI application.
+3. Used when running with an async server like Daphne or Uvicorn (Gunicorn uses `wsgi.py` instead).
+
+---
+
+## 22. File‑by‑File Walkthrough
 
 > If asked "what does this file do?" for any file in the repo, use this reference.
 
@@ -1733,22 +2107,35 @@ Migration: `1730000000000-init-users` creates this table.
 | `src/auth/guards/local-auth.guard.ts` | Triggers Passport local authentication |
 | `src/auth/guards/jwt-auth.guard.ts` | Triggers Passport JWT validation |
 | `src/auth/redis-token.service.ts` | Stores/validates/deletes refresh token JTIs in Redis |
+| `src/auth/dto/login.dto.ts` | Login DTO with `@IsEmail()` and `@IsString()` validators |
+| `src/auth/dto/refresh.dto.ts` | Refresh token DTO |
+| `src/authorization/authorization.module.ts` | Registers guards and decorators |
 | `src/authorization/roles.guard.ts` | Checks user role ≥ required role |
+| `src/authorization/roles.decorator.ts` | `@Roles()` custom decorator |
 | `src/authorization/team-access.guard.ts` | Checks team membership + team role |
-| `src/authorization/decorators.ts` | `@Roles()` and `@TeamAccess()` custom decorators |
+| `src/authorization/team-access.decorator.ts` | `@TeamAccess()` custom decorator |
 | `src/users/users.module.ts` | TypeORM User entity registration |
 | `src/users/users.service.ts` | CRUD for users, bcrypt hashing, login tracking |
 | `src/users/users.controller.ts` | `/users` endpoints (admin only) |
 | `src/users/user.entity.ts` | TypeORM entity: User with roles, teams, auth provider |
-| `src/users/dto/` | Login DTO, Create User DTO with validation decorators |
+| `src/users/dto/create-user.dto.ts` | Create user DTO with validation |
+| `src/users/dto/update-user.dto.ts` | Partial update user DTO |
 | `src/proxy/proxy.module.ts` | Registers proxy middleware for downstream routes |
 | `src/proxy/proxy.middleware.ts` | JWT verify → route matching → header enrichment → proxy |
+| `src/observability/tracing.ts` | OpenTelemetry NodeSDK setup (HTTP, Express, MongoDB, ioredis auto‑instrumentation) |
 | `src/observability/proxy-metrics.middleware.ts` | Prometheus latency + counter tracking |
 | `src/observability/metrics.service.ts` | Prometheus histogram + counter instances |
 | `src/observability/metrics.controller.ts` | `GET /metrics` endpoint for Prometheus scraping |
-| `src/health/health.controller.ts` | Liveness + readiness checks (PG + Redis) |
-| `src/migrations/1730000000000-init-users.ts` | Creates users table |
-| `src/typeorm.datasource.ts` | TypeORM CLI datasource config for migrations |
+| `src/infrastructure/health.controller.ts` | Liveness + readiness checks (PG + Redis) |
+| `src/infrastructure/migrations/1730000000000-init-users.ts` | Creates users table |
+| `src/infrastructure/typeorm.datasource.ts` | TypeORM CLI datasource config for migrations |
+| `.env.example` | Local dev environment variable template |
+| `.eslintrc.js` | ESLint configuration |
+| `.prettierrc` | Prettier formatting rules |
+| `nest-cli.json` | NestJS CLI config (compiler options) |
+| `package.json` | Dependencies + npm scripts |
+| `Dockerfile` | Multi‑stage Node 20 build → slim runtime |
+| `tsconfig.json` / `tsconfig.build.json` | TypeScript compiler options |
 
 ### `apps/topology-service/`
 
@@ -1756,85 +2143,158 @@ Migration: `1730000000000-init-users` creates this table.
 |---|---|
 | `src/main.ts` | Bootstraps NestJS, global pipes, CORS, Swagger |
 | `src/app.module.ts` | Root module: Mongoose, Pino, Graph, Ingestion, Query, Health, Metrics |
-| `src/app.config.ts` | Joi‑validated env var schema (Mongo, Redis, ports) |
+| `src/common/config/app.config.ts` | Joi‑validated env var schema (Mongo, Redis, ports) |
+| `src/common/config/logger.config.ts` | Pino logging config: JSON in prod, pretty in dev, OTel trace injection |
+| `src/common/config/swagger.config.ts` | Swagger UI setup: title, tags, description, dev server |
+| `src/common/config/index.ts` | Barrel export for config modules |
+| `src/common/filters/all-exceptions.filter.ts` | Global exception handler → structured JSON |
+| `src/common/filters/index.ts` | Barrel export |
+| `src/common/interceptors/correlation-id.interceptor.ts` | UUID correlation ID on every request/response |
+| `src/common/interceptors/index.ts` | Barrel export |
+| `src/common/index.ts` | Barrel export for common module |
 | `src/graph/graph.module.ts` | Provides GraphService as singleton |
 | `src/graph/graph.service.ts` | **Core**: in‑memory graph, Tarjan, Kahn, BFS, blast radius |
-| `src/graph/models/service-node.model.ts` | ServiceNode interface + Mongoose schema |
-| `src/graph/models/dependency-edge.model.ts` | DependencyEdge interface + Mongoose schema |
+| `src/graph/entities/service-node.entity.ts` | ServiceNode interface |
+| `src/graph/entities/dependency-edge.entity.ts` | DependencyEdge interface |
+| `src/graph/entities/index.ts` | Barrel export |
+| `src/graph/dto/service-node.dto.ts` | Service node validation DTO |
+| `src/graph/dto/dependency-edge.dto.ts` | Dependency edge validation DTO |
+| `src/graph/dto/index.ts` | Barrel export |
+| `src/graph/index.ts` | Barrel export for graph module |
 | `src/ingestion/ingestion.module.ts` | Ingestion controller + gateway |
 | `src/ingestion/ingestion.controller.ts` | `POST /ingestion/services`, `/dependencies`, `/bulk` |
-| `src/ingestion/dto/` | RegisterServiceDto, RegisterDependencyDto, BulkRegisterDto |
+| `src/ingestion/dto/ingestion.dto.ts` | RegisterServiceDto, RegisterDependencyDto, BulkRegisterDto |
+| `src/ingestion/dto/index.ts` | Barrel export |
 | `src/ingestion/graph.gateway.ts` | WebSocket gateway: subscribe, unsubscribe, ping, graph_update |
+| `src/ingestion/index.ts` | Barrel export |
 | `src/query/query.module.ts` | Query controller |
 | `src/query/query.controller.ts` | `GET /query/services`, `/blast-radius`, `/cycles`, `/paths`, etc. |
-| `src/persistence/persistence.module.ts` | MongoDB snapshot persistence |
-| `src/persistence/persistence.service.ts` | Load, save, restore, cleanup snapshots |
-| `src/persistence/schemas/graph-snapshot.schema.ts` | Mongoose schema for snapshots |
-| `src/common/filters/all-exceptions.filter.ts` | Global exception handler → structured JSON |
-| `src/common/interceptors/correlation-id.interceptor.ts` | UUID correlation ID on every request/response |
+| `src/query/dto/query.dto.ts` | Query parameter DTOs (depth, source/target) |
+| `src/query/dto/index.ts` | Barrel export |
+| `src/query/index.ts` | Barrel export |
+| `src/infrastructure/infrastructure.module.ts` | Persistence + health modules |
+| `src/infrastructure/persistence/persistence.service.ts` | Load, save, restore, cleanup MongoDB snapshots |
+| `src/infrastructure/persistence/index.ts` | Barrel export |
+| `src/infrastructure/schemas/graph-snapshot.schema.ts` | Mongoose schema for snapshots |
+| `src/infrastructure/schemas/index.ts` | Barrel export |
+| `src/infrastructure/health/health.controller.ts` | Mongo + Redis + memory health checks |
+| `src/infrastructure/health/redis-health.indicator.ts` | Custom Redis `ping` health indicator (Terminus) |
+| `src/infrastructure/health/index.ts` | Barrel export |
+| `src/infrastructure/index.ts` | Barrel export |
+| `src/observability/tracing.ts` | OpenTelemetry NodeSDK setup (HTTP, Express, MongoDB, ioredis) |
 | `src/observability/metrics.service.ts` | Prometheus gauges + histograms for graph metrics |
 | `src/observability/metrics.controller.ts` | `GET /metrics` for Prometheus |
-| `src/health/health.controller.ts` | Mongo + Redis + memory health checks |
+| `.env.example` | Local dev environment template |
+| `.eslintrc.js` / `.prettierrc` | Linting and formatting config |
+| `nest-cli.json` | NestJS CLI config |
+| `package.json` | Dependencies + npm scripts |
+| `Dockerfile` | Multi‑stage Node 20 build |
+| `docker-compose.yml` | Standalone dev compose (Mongo + Redis) |
+| `.dockerignore` | Excludes node_modules, dist from build context |
+| `tsconfig.json` / `tsconfig.build.json` | TypeScript compiler options |
 
 ### `apps/analysis-service/`
 
 | File | Purpose |
 |---|---|
 | `src/analysis_service/main.py` | FastAPI app creation, CORS, routers, exception handlers |
-| `src/analysis_service/config.py` | Pydantic `BaseSettings` for env vars |
-| `src/analysis_service/analysis/router.py` | `/analysis/impact`, `/analysis/impact/async`, `/analysis/impact/results/:id` |
+| `src/analysis_service/core/config.py` | Pydantic `BaseSettings` for env vars |
+| `src/analysis_service/core/errors.py` | `AnalysisServiceError` custom exception class |
+| `src/analysis_service/core/http_client.py` | HTTP client with circuit breaker for topology calls |
+| `src/analysis_service/core/logging.py` | Structlog config with OTel trace/span ID injection |
+| `src/analysis_service/core/metrics.py` | Prometheus: `analysis_risk_score_histogram`, `simulation_duration_seconds` |
+| `src/analysis_service/core/middleware.py` | `CorrelationIdMiddleware` (FastAPI/Starlette, uses `contextvars`) |
+| `src/analysis_service/core/observability.py` | OpenTelemetry TracerProvider + FastAPI/HTTPX instrumentation |
+| `src/analysis_service/core/__init__.py` | Package init |
+| `src/analysis_service/api/analysis.py` | `/analysis/impact`, `/analysis/impact/async`, `/analysis/impact/results/:id` |
+| `src/analysis_service/api/compatibility.py` | `/compatibility/check` |
+| `src/analysis_service/api/simulation.py` | `/simulation/cascade` |
+| `src/analysis_service/api/health.py` | `/health/live` endpoint |
+| `src/analysis_service/api/__init__.py` | Package init |
 | `src/analysis_service/analysis/engine.py` | `ImpactAnalysisEngine`: BFS traversal, risk scoring |
-| `src/analysis_service/analysis/models.py` | Pydantic models: ChangeProposal, ImpactResult, AffectedService |
-| `src/analysis_service/compatibility/router.py` | `/compatibility/check` |
+| `src/analysis_service/analysis/__init__.py` | Package init |
+| `src/analysis_service/schemas/analysis.py` | Pydantic models: ChangeProposal, ImpactResult, AffectedService |
+| `src/analysis_service/schemas/compatibility.py` | CompatibilityRequest/Response models |
+| `src/analysis_service/schemas/simulation.py` | SimulationRequest/Response models |
+| `src/analysis_service/schemas/__init__.py` | Package init |
 | `src/analysis_service/compatibility/checker.py` | Schema diff: breaking vs. safe changes |
-| `src/analysis_service/compatibility/models.py` | CompatibilityRequest/Response models |
-| `src/analysis_service/simulation/router.py` | `/simulation/cascade` |
+| `src/analysis_service/compatibility/__init__.py` | Package init |
 | `src/analysis_service/simulation/engine.py` | NetworkX cascading failure simulation |
-| `src/analysis_service/simulation/models.py` | SimulationRequest/Response models |
-| `src/analysis_service/http_client.py` | HTTP client with circuit breaker for topology calls |
-| `src/analysis_service/health/router.py` | `/health/live` endpoint |
-| `src/analysis_service/errors.py` | `AnalysisServiceError` custom exception class |
+| `src/analysis_service/simulation/__init__.py` | Package init |
+| `src/analysis_service/__init__.py` | Package init |
+| `pyproject.toml` | Project metadata, dependencies, pytest/ruff config |
+| `Dockerfile` | Python 3.12, `uv sync`, uvicorn entrypoint |
+| `README.md` | Service‑specific documentation |
 
 ### `apps/registry-service/`
 
 | File | Purpose |
 |---|---|
 | `manage.py` | Django CLI entry point |
+| `registry/settings/__init__.py` | Settings package init |
 | `registry/settings/base.py` | Core settings: DB, apps, REST framework, logging |
-| `registry/settings/development.py` | Debug mode, relaxed CORS |
+| `registry/settings/dev.py` | Debug mode, relaxed CORS |
+| `registry/settings/prod.py` | Production settings (strict) |
 | `registry/settings/test.py` | SQLite for fast tests |
 | `registry/urls.py` | URL routing: `/api/` prefix for all apps |
 | `registry/wsgi.py` | WSGI entry point for Gunicorn |
+| `registry/asgi.py` | ASGI entry point with OTel init |
+| `registry/middleware.py` | `CorrelationIdMiddleware` (Django) with OTel trace/span extraction |
+| `registry/observability.py` | OpenTelemetry TracerProvider + Django/HTTPX instrumentation |
+| `registry/metrics.py` | Prometheus: risk score histogram, simulation duration |
+| `registry/pagination.py` | Cursor‑based pagination (page_size=50, order by `-id`) |
+| `registry/health_views.py` | Liveness + readiness health checks |
+| `registry/__init__.py` | Package init |
+| `registry/apps/__init__.py` | Package init |
 | `registry/apps/services/models.py` | Service, ServiceVersion, ServiceEndpoint models |
 | `registry/apps/services/serializers.py` | DRF serializers for services |
 | `registry/apps/services/views.py` | `ServiceViewSet` with version + endpoint sub‑routes |
-| `registry/apps/services/urls.py` | Router registration |
+| `registry/apps/services/admin.py` | Django admin: Service, Version, Endpoint with inline editors |
+| `registry/apps/services/apps.py` | Django app config |
+| `registry/apps/services/migrations/0001_initial.py` | Initial migration |
+| `registry/apps/services/tests/factories.py` | Factory Boy: `ServiceFactory`, `ServiceVersionFactory`, `ServiceEndpointFactory` |
 | `registry/apps/teams/models.py` | Team, TeamMembership, ServiceOwnership models |
 | `registry/apps/teams/serializers.py` | DRF serializers for teams |
 | `registry/apps/teams/views.py` | `TeamViewSet` with member + ownership sub‑routes |
-| `registry/apps/teams/urls.py` | Router registration |
+| `registry/apps/teams/admin.py` | Django admin: Team, Membership, Ownership with custom displays |
+| `registry/apps/teams/apps.py` | Django app config |
+| `registry/apps/teams/migrations/0001_initial.py` | Initial migration |
+| `registry/apps/teams/tests/factories.py` | Factory Boy: `UserFactory`, `TeamFactory`, `TeamMembershipFactory`, `ServiceOwnershipFactory` |
 | `registry/apps/snapshots/models.py` | DependencySnapshot model |
 | `registry/apps/snapshots/serializers.py` | Snapshot serializer with comparison |
 | `registry/apps/snapshots/views.py` | `SnapshotViewSet` with compare action |
-| `registry/apps/snapshots/urls.py` | Router registration |
-| `registry/apps/snapshots/management/commands/capture_snapshot.py` | CLI command to capture graph snapshot |
-| `registry/apps/health/views.py` | Liveness + readiness health checks |
+| `registry/apps/snapshots/admin.py` | Django admin: Snapshot with captured_at, counts display |
+| `registry/apps/snapshots/apps.py` | Django app config |
+| `registry/apps/snapshots/migrations/0001_initial.py` | Initial migration |
+| `registry/apps/snapshots/management/commands/capture_snapshot.py` | CLI command to capture graph snapshot from topology |
+| `registry/apps/snapshots/tests/factories.py` | Factory Boy: `DependencySnapshotFactory` |
+| `pyproject.toml` | Project metadata, dependencies, pytest/ruff config |
+| `Dockerfile` | Python 3.12, migrate → seed → gunicorn entrypoint |
+| `README.md` | Service‑specific documentation |
 
 ### `apps/web-app/`
 
 | File | Purpose |
 |---|---|
-| `src/main.ts` | Angular bootstrap with `provideZoneChangeDetection` |
+| `src/main.ts` | Angular bootstrap with zoneless change detection |
+| `src/index.html` | Root HTML shell |
+| `src/styles.css` | Global Tailwind + PrimeNG styles |
+| `src/environments/environment.ts` | API base URL + WebSocket URL config |
 | `src/app/app.component.ts` | Root component with `<router-outlet>` |
+| `src/app/app.component.html` | Root template |
+| `src/app/app.component.css` | Root styles |
 | `src/app/app.routes.ts` | All routes with lazy loading + guards |
-| `src/app/app.config.ts` | Angular providers: HTTP client, router, interceptors |
+| `src/app/app.config.ts` | Providers: zoneless CD, PrimeNG Aura theme, interceptors, preloading |
 | `src/app/core/services/auth.service.ts` | Signal‑based auth state, JWT decode, refresh logic |
 | `src/app/core/services/api.service.ts` | Typed HTTP client wrapper |
 | `src/app/core/services/websocket.service.ts` | Socket.io client with signal‑based updates |
+| `src/app/core/services/theme.service.ts` | Dark/light mode toggle, persists to localStorage |
+| `src/app/core/services/models.ts` | Frontend TypeScript interfaces (ServiceNode, DependencyEdge, etc.) |
 | `src/app/core/interceptors/auth-token.interceptor.ts` | Attaches Bearer token to requests |
-| `src/app/core/interceptors/refresh-token.interceptor.ts` | Auto‑refreshes on 401 |
+| `src/app/core/interceptors/refresh-token.interceptor.ts` | Auto‑refreshes on 401, avoids race conditions |
 | `src/app/core/guards/auth.guard.ts` | Redirects to `/login` if not authenticated |
 | `src/app/core/guards/admin.guard.ts` | Redirects to `/dashboard` if not admin |
+| `src/app/core/routing/critical-preload.strategy.ts` | Selective preloading for `preload: true` routes |
 | `src/app/features/auth/login.page.ts` | Login form with email/password + Google OAuth |
 | `src/app/features/auth/google-callback.page.ts` | Handles OAuth redirect |
 | `src/app/features/dashboard/dashboard.page.ts` | Overview cards: service count, dependencies, health |
@@ -1846,53 +2306,221 @@ Migration: `1730000000000-init-users` creates this table.
 | `src/app/features/teams/teams.page.ts` | Team list |
 | `src/app/features/teams/team-detail.page.ts` | Team members + owned services |
 | `src/app/features/snapshots/snapshots.page.ts` | Snapshot list + diff comparison |
-| `src/app/shared/pipes/truncate.pipe.ts` | String truncation pipe |
-| `src/app/shared/pipes/relative-time.pipe.ts` | Relative time display pipe |
-| `src/app/layouts/main-layout.component.ts` | Sidebar + topbar shell |
-| `src/app/layouts/auth-layout.component.ts` | Centred card layout for login |
+| `src/app/shared/components/confirm-dialog.component.ts` | Modal with Cancel/Confirm using `model()` binding |
+| `src/app/shared/components/empty-state.component.ts` | "No data" placeholder |
+| `src/app/shared/components/loading-spinner.component.ts` | PrimeNG spinner wrapper |
+| `src/app/shared/components/pagination.component.ts` | PrimeNG paginator wrapper |
+| `src/app/shared/components/risk-score-badge.component.ts` | Colour‑coded risk tag (green/yellow/red) |
+| `src/app/shared/components/service-type-badge.component.ts` | Colour‑coded service type tag |
+| `src/app/shared/directives/click-outside.directive.ts` | Emits event on click outside host element |
+| `src/app/shared/directives/infinite-scroll.directive.ts` | Emits event when scrolled to bottom (30 px threshold) |
+| `src/app/shared/pipes/truncate.pipe.ts` | String truncation pipe (default 60 chars) |
+| `src/app/shared/pipes/relative-time.pipe.ts` | Relative time display pipe ("5m ago") |
+| `src/app/layouts/main-layout.component.ts` | Sidebar + topbar shell (authenticated pages) |
+| `src/app/layouts/auth-layout.component.ts` | Centred card layout (login page) |
+| `nginx.conf` | SPA fallback + API reverse proxy rules |
+| `angular.json` | Angular CLI workspace config |
+| `jest.config.js` | Jest test config (70% coverage threshold) |
+| `setup-jest.ts` | Zone.js test environment setup |
+| `package.json` | Dependencies + npm scripts |
+| `Dockerfile` | Multi‑stage: Node build → Nginx runtime |
+| `.dockerignore` | Excludes node_modules from build |
+| `.eslintrc.cjs` | ESLint config |
+| `.prettierrc` | Prettier config |
+| `.postcssrc.json` | PostCSS config (for Tailwind) |
+| `.editorconfig` | Editor config |
+| `tsconfig.json` / `tsconfig.app.json` / `tsconfig.spec.json` | TypeScript configs |
 
 ### `libs/`
 
 | File | Purpose |
 |---|---|
-| `api-contracts/topology.yaml` | OpenAPI 3.1 spec for topology service |
-| `api-contracts/analysis.yaml` | OpenAPI 3.1 spec for analysis service |
-| `api-contracts/registry.yaml` | OpenAPI 3.1 spec for registry service |
-| `api-contracts/auth.yaml` | OpenAPI 3.1 spec for auth gateway |
-| `auth-utils/typescript/` | JWT helpers, role constants, permission matrix (shared TS code) |
-| `auth-utils/python/` | JWT helpers, role constants (shared Python code) |
-| `domain-models/typescript/` | Shared TypeScript interfaces (ServiceNode, DependencyEdge, etc.) |
-| `domain-models/python/` | Shared Python dataclasses |
+| `api-contracts/README.md` | How to use the contract specs |
+| `api-contracts/topology-api.yaml` | OpenAPI 3.1 spec for topology service |
+| `api-contracts/analysis-api.yaml` | OpenAPI 3.1 spec for analysis service |
+| `api-contracts/registry-api.yaml` | OpenAPI 3.1 spec for registry service |
+| `api-contracts/auth-api.yaml` | OpenAPI 3.1 spec for auth gateway |
+| `auth-utils/constants.ts` | Shared TypeScript role/permission constants |
+| `auth-utils/constants.py` | Shared Python role/permission constants |
+| `auth-utils/jwt.ts` | JWT encoding/decoding helpers (TypeScript) |
+| `auth-utils/jwt_utils.py` | JWT encoding/decoding helpers (Python) |
+| `auth-utils/permissions.ts` | Permission matrix (TypeScript) |
+| `auth-utils/permissions.py` | Permission matrix (Python) |
+| `auth-utils/roles.py` | Role hierarchy definitions (Python) |
+| `auth-utils/index.ts` | Barrel export |
+| `auth-utils/__init__.py` | Package init |
+| `domain-models/graph.ts` | ServiceNode, DependencyEdge interfaces (TS) |
+| `domain-models/graph.py` | ServiceNode, DependencyEdge dataclasses (Python) |
+| `domain-models/analysis.ts` | ChangeProposal, ImpactResult interfaces (TS) |
+| `domain-models/analysis.py` | ChangeProposal, ImpactResult dataclasses (Python) |
+| `domain-models/registry.ts` | Team, Ownership interfaces (TS) |
+| `domain-models/registry.py` | Team, Ownership dataclasses (Python) |
+| `domain-models/index.ts` | Barrel export |
+| `domain-models/__init__.py` | Package init |
+| `domain-models/pyproject.toml` | Python package config |
+| `domain-models/tsconfig.json` | TypeScript config |
 
 ### `infra/`
 
 | File | Purpose |
 |---|---|
-| `docker/docker-compose.yml` | Full local stack definition |
+| `docker/docker-compose.yml` | Full local stack (all 5 services + 4 databases) |
+| `docker/docker-compose.test.yml` | Test overrides: tmpfs storage, no persistence, NODE_ENV=test |
 | `docker/.env.example` | Docker Compose env vars |
+| `docker/README.md` | Docker development guide |
 | `helm/<service>/Chart.yaml` | Helm chart metadata per service |
-| `helm/<service>/values.yaml` | Default Helm values |
-| `helm/<service>/templates/` | K8s manifests (Deployment, Service, Ingress, HPA, ConfigMap) |
-| `k8s/namespace.yaml` | Kubernetes namespace definition |
-| `k8s/secrets.yaml` | Template for K8s secrets |
-| `argocd/<service>-app.yaml` | ArgoCD Application manifests |
+| `helm/<service>/values.yaml` | Default (dev) Helm values |
+| `helm/<service>/values-sit.yaml` | System integration testing values |
+| `helm/<service>/values-staging.yaml` | Staging values |
+| `helm/<service>/values-prod.yaml` | Production values (HPA, higher resources) |
+| `helm/<service>/templates/_helpers.tpl` | Shared template functions (fullname, labels, selector) |
+| `helm/<service>/templates/deployment.yaml` | Pod spec, probes, env, security context |
+| `helm/<service>/templates/service.yaml` | ClusterIP service |
+| `helm/<service>/templates/ingress.yaml` | Ingress with TLS |
+| `helm/<service>/templates/configmap.yaml` | Non‑secret env vars |
+| `helm/<service>/templates/secret.yaml` | Sensitive values (base64) |
+| `helm/<service>/templates/hpa.yaml` | HorizontalPodAutoscaler |
+| `helm/<service>/templates/poddisruptionbudget.yaml` | PDB with `minAvailable: 1` |
+| `helm/ripplemark/Chart.yaml` | **Umbrella chart** — bundles all 5 services as dependencies |
+| `helm/ripplemark/charts/*.tgz` | Packaged sub‑chart archives |
+| `helm/ripplemark/values*.yaml` | Per‑environment umbrella values |
+| `k8s/namespace.yaml` | Namespace with `restricted` pod security policy |
+| `k8s/network-policy.yaml` | Ingress/egress rules (allow ripplemark + nginx, block all else) |
+| `k8s/resource-quotas.yaml` | CPU 6/12, memory 8/16 Gi, max 120 pods |
+| `k8s/grafana/dependency-health.json` | Grafana dashboard: DB/cache health stat panels |
+| `k8s/grafana/red-metrics.json` | Grafana dashboard: Rate, Errors, Duration |
+| `k8s/grafana/service-overview.json` | Grafana dashboard: RPS + p95 latency per service |
+| `k8s/prometheus/prometheus-rules.yaml` | Alert rules: ServiceDown, HighP95Latency, HighErrorRate, HighPodRestarts |
+| `k8s/prometheus/servicemonitor-topology.yaml` | Prometheus scrape config for topology |
+| `k8s/prometheus/servicemonitor-analysis.yaml` | Prometheus scrape config for analysis |
+| `k8s/prometheus/servicemonitor-auth.yaml` | Prometheus scrape config for auth |
+| `k8s/prometheus/servicemonitor-registry.yaml` | Prometheus scrape config for registry |
+| `k8s/prometheus/servicemonitor-web.yaml` | Prometheus scrape config for web app |
+| `argocd/applicationset.yaml` | Matrix generator: deploy all services × all environments |
+| `argocd/apps/dev/*.yaml` | ArgoCD Application per service (dev) |
+| `argocd/apps/staging/*.yaml` | ArgoCD Application per service (staging) |
+| `argocd/apps/prod/*.yaml` | ArgoCD Application per service (prod) |
 
 ### `tests/`
 
 | File | Purpose |
 |---|---|
-| `integration/conftest.py` | Docker Compose setup, health waits, auth fixtures |
+| `integration/conftest.py` | Docker Compose setup, health waits, auth fixtures, `base_urls` |
 | `integration/test_cross_service.py` | Full‑stack integration: auth → register → query → analyse → snapshot |
+
+### `docs/`
+
+| File | Purpose |
+|---|---|
+| `architecture.md` | System architecture diagram, data flows, tech rationale |
+| `api-guide.md` | Operational API reference with cURL examples |
+| `local-run.md` | Three local dev options (full Docker, test stack, individual) |
+| `onboarding.md` | New developer step‑by‑step guide |
+| `google-oauth-local-setup.md` | Google OAuth config for local testing |
+| `decisions/001-monorepo-structure.md` | ADR: monorepo for atomic cross‑service changes |
+| `decisions/002-nestjs-for-graph-services.md` | ADR: NestJS for strong typing + WebSockets |
+| `decisions/003-fastapi-for-analysis.md` | ADR: FastAPI for algorithm‑heavy Python code |
+| `decisions/004-django-for-registry.md` | ADR: Django for mature ORM + migrations |
+| `decisions/005-mongodb-for-graph-storage.md` | ADR: MongoDB for flexible document schema |
+| `decisions/006-nats-over-kafka.md` | ADR: NATS for low‑latency, simple operations |
+| `decisions/007-angular-signals-over-ngrx.md` | ADR: Signals for less boilerplate |
+| `decisions/008-gitops-with-argocd.md` | ADR: GitOps for declarative deployments |
 
 ### `.github/workflows/`
 
 | File | Purpose |
 |---|---|
-| `ci.yml` | PR checks: lint, test, build (matrix: Node + Python) |
+| `ci.yml` | PR checks: lint, test, build (matrix: Node + Python), Helm lint |
 | `security.yml` | Dependency audit, SAST scanning |
 | `cd.yml` | Build + push Docker images, ArgoCD sync trigger |
 | `release.yml` | Version tagging + GitHub Release creation |
 
+### Test Files (all services)
+
+> Every source file has a co‑located test. If asked "where are the tests?":
+
+**Auth Gateway** (19 spec files):
+
+| Test | What it verifies |
+|---|---|
+| `auth.controller.spec.ts` | Login, OAuth callback, refresh, logout flows |
+| `auth.service.spec.ts` | Credential validation, JWT refresh, OAuth login, token rotation |
+| `login.dto.spec.ts` | DTO instantiation and validation |
+| `redis-token.service.spec.ts` | Refresh token storage/validation with Redis |
+| `local.strategy.spec.ts` | Passport local authentication |
+| `jwt.strategy.spec.ts` | JWT token validation |
+| `google.strategy.spec.ts` | Google OAuth profile mapping |
+| `roles.guard.spec.ts` | Role‑based access control |
+| `team-access.guard.spec.ts` | Team membership permissions |
+| `decorators.spec.ts` | Metadata decorators for roles + team access |
+| `users.controller.spec.ts` | User CRUD operations |
+| `users.service.spec.ts` | User creation with bcrypt, updates, login tracking |
+| `proxy.middleware.spec.ts` | Auth token validation, service routing, identity headers |
+| `proxy-metrics.middleware.spec.ts` | Request duration + change proposal metrics |
+| `metrics.controller.spec.ts` | Metrics endpoint |
+| `metrics.service.spec.ts` | Prometheus metrics output |
+| `health.controller.spec.ts` | PostgreSQL + Redis health checks |
+| `typeorm.datasource.spec.ts` | TypeORM configuration validation |
+| `1730000000000-init-users.spec.ts` | Migration up/down execution |
+| `test/app.e2e-spec.ts` | End‑to‑end NestJS app test |
+
+**Topology Service** (9 spec files):
+
+| Test | What it verifies |
+|---|---|
+| `graph.service.spec.ts` | Node/edge ops, cycle detection, toposort, shortest path, blast radius |
+| `ingestion.controller.spec.ts` | Service registration, bulk registration, dependency handling |
+| `graph.gateway.spec.ts` | WebSocket connections, subscriptions, graph updates |
+| `query.controller.spec.ts` | Service queries, dependencies, reverse deps, blast radius, paths |
+| `persistence.service.spec.ts` | Snapshot loading, saving, restoration, cleanup |
+| `health.controller.spec.ts` | MongoDB, memory, Redis health checks |
+| `app.config.spec.ts` | Environment variable parsing + defaults |
+| `metrics.controller.spec.ts` | Prometheus metrics output |
+| `metrics.service.spec.ts` | Graph counters + metrics tracking |
+| `test/app.e2e-spec.ts` | End‑to‑end NestJS app test |
+
+**Web App** (5 spec files):
+
+| Test | What it verifies |
+|---|---|
+| `app.component.spec.ts` | Component creation + router outlet |
+| `auth.service.spec.ts` | Token refresh, login, OAuth flows |
+| `api.service.spec.ts` | HTTP GET/POST/PUT/PATCH/DELETE operations |
+| `dashboard.page.spec.ts` | Dashboard card rendering |
+| `team-detail.page.spec.ts` | Team member filtering + role management |
+
+**Analysis Service** (7 test files):
+
+| Test | What it verifies |
+|---|---|
+| `test_analysis_engine.py` | Impact analysis, dependency traversal, property‑based tests (Hypothesis) |
+| `test_compatibility_checker.py` | Schema breaking changes detection, safe additions |
+| `test_simulation_engine.py` | Cascading failure simulation metrics |
+| `test_http_client.py` | Circuit breaker functionality |
+| `test_api.py` | FastAPI endpoints (impact, compatibility, simulation, async queue) |
+| `test_health_endpoints.py` | Async health endpoints (topology + Redis checks) |
+| `test_error_handler.py` | Custom error handling |
+
+**Registry Service** (14 test files):
+
+| Test | What it verifies |
+|---|---|
+| `test_service_api.py` | Service listing |
+| `test_service_version_api.py` | Version creation + listing |
+| `test_service_endpoint_api.py` | Endpoint creation |
+| `test_service_models.py` | Unique current version constraint |
+| `test_service_migrations.py` | Migration application |
+| `test_ownership_api.py` | Team service ownership + listing |
+| `test_membership_api.py` | Team membership creation |
+| `test_team_models.py` | Unique service‑team constraint |
+| `test_team_migrations.py` | Migration application |
+| `test_snapshot_api.py` | Snapshot comparison |
+| `test_snapshot_list_api.py` | Snapshot listing |
+| `test_snapshot_models.py` | Snapshot defaults |
+| `test_snapshot_migrations.py` | Migration application |
+| `test_management_command.py` | Snapshot capture from topology |
+| `test_health_views.py` | Health endpoints (liveness, readiness), metrics |
+
 ---
 
-> **You now have an answer for every possible question about every file, every decision, every algorithm, every config variable, every endpoint, every model, every pattern, and every trade‑off in this repository. If they ask something not here, fall back to: "Let me walk you through my reasoning process for that."**
+> **You now have an answer for every possible question about every file, every decision, every algorithm, every config variable, every endpoint, every model, every pattern, every test, and every trade‑off in this repository. If they ask something not here, fall back to: "Let me walk you through my reasoning process for that."**
