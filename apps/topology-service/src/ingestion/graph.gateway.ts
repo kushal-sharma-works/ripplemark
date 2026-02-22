@@ -74,7 +74,7 @@ export class GraphGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('ping')
-  handlePing(client: Socket) {
+  handlePing(_client: Socket) {
     return {
       event: 'pong',
       timestamp: new Date(),
