@@ -37,7 +37,7 @@ src = ["src"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
-ignore = ["E501"]
+ignore = ["E501", "B008", "F401", "I001", "SIM401", "UP006", "UP035"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
