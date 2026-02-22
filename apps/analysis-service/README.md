@@ -6,7 +6,7 @@ FastAPI service for evaluating change impact across the service dependency graph
 
 ```bash
 uv sync --dev
-uv run uvicorn analysis_service.main:app --reload --port 8001
+uv run uvicorn analysis_service.main:app --reload --port 8000
 ```
 
 ## Testing

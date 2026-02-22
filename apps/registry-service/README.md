@@ -7,7 +7,7 @@ Django 5.1+ service registry and ownership metadata API.
 ```bash
 uv sync --dev
 uv run python registry/manage.py migrate
-uv run python registry/manage.py runserver 0.0.0.0:8002
+uv run python registry/manage.py runserver 0.0.0.0:8001
 ```
 
 ## Testing

@@ -2,7 +2,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from apps.services.tests.factories import ServiceFactory
-from apps.teams.tests.factories import TeamFactory, ServiceOwnershipFactory, UserFactory
+from apps.teams.tests.factories import ServiceOwnershipFactory, TeamFactory, UserFactory
 
 
 @pytest.mark.django_db

@@ -1,13 +1,13 @@
 from django.contrib import admin
 from django.urls import include, path
+from rest_framework.authtoken.views import obtain_auth_token
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from rest_framework.authtoken.views import obtain_auth_token
 
-from apps.services.views import ServiceViewSet, ServiceVersionViewSet, ServiceEndpointViewSet
-from apps.teams.views import TeamViewSet, TeamMembershipViewSet, ServiceOwnershipViewSet
+from apps.services.views import ServiceEndpointViewSet, ServiceVersionViewSet, ServiceViewSet
 from apps.snapshots.views import DependencySnapshotViewSet
-from registry.health_views import live, ready, metrics
+from apps.teams.views import ServiceOwnershipViewSet, TeamMembershipViewSet, TeamViewSet
+from registry.health_views import live, metrics, ready
 
 router = DefaultRouter()
 router.register(r"services", ServiceViewSet, basename="service")

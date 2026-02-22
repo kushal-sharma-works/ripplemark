@@ -1,7 +1,6 @@
 # Ripplemark
 
 [![CI](https://github.com/kushal-sharma-works/ripplemark/actions/workflows/ci.yml/badge.svg)](https://github.com/kushal-sharma-works/ripplemark/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-artifacts%20uploaded-brightgreen)](https://github.com/kushal-sharma-works/ripplemark/actions)
 [![License](https://img.shields.io/github/license/kushal-sharma-works/ripplemark)](LICENSE)
 
 Ripplemark is a distributed dependency-intelligence platform for microservice ecosystems. It combines service cataloging, dependency graph management, and change-impact analysis to estimate blast radius before release.
@@ -56,10 +55,10 @@ Local login for testing:
 | Registry | Django + DRF | 5.1+ |
 | Relational DB | PostgreSQL | 16 |
 | Graph/Document DB | MongoDB | 7 |
-| Cache/Queue | Redis | 7 |
+| Cache/Token Store | Redis | 7 |
 | Messaging | NATS | 2.10 |
 | Packaging/Deploy | Helm + ArgoCD | Helm 3 / GitOps |
-| CI/CD | GitHub Actions | Workflows in `.github/workflows` |
+| CI/CD | GitHub Actions | CI + security workflows in `.github/workflows` |
 
 ## Documentation
 
@@ -89,7 +88,6 @@ ripplemark/
 │   ├── helm/
 │   ├── k8s/
 │   └── argocd/
-├── ci/
 ├── docs/
 │   └── decisions/
 └── .github/workflows/

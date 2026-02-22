@@ -1,8 +1,8 @@
 import factory
 from django.contrib.auth import get_user_model
 
-from apps.teams.models import Team, TeamMembership, ServiceOwnership
 from apps.services.models import Service
+from apps.teams.models import ServiceOwnership, Team, TeamMembership
 
 User = get_user_model()
 

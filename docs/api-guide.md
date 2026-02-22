@@ -36,6 +36,12 @@ This guide is a quick operational reference across Ripplemark services.
 - `POST /simulation/run` — what-if simulation
 - `GET /health/live` — health check
 
+Async analysis note:
+
+- Async results are stored in-memory with bounded retention.
+- Polling `/analysis/impact/results/{analysisId}` returns `pending` or `complete`.
+- Expired entries may return `404` and should be treated as no longer available.
+
 ### Registry Service
 
 - `GET /api/services/` — list services (supports filters)

@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.services.serializers import ServiceSerializer
-from apps.teams.models import Team, TeamMembership, ServiceOwnership
+from apps.teams.models import ServiceOwnership, Team, TeamMembership
 from apps.teams.serializers import (
     ServiceOwnershipSerializer,
     TeamMembershipSerializer,

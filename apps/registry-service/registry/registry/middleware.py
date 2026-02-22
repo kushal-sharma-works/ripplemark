@@ -1,8 +1,8 @@
 import uuid
-import structlog
-from opentelemetry import trace
 
+import structlog
 from django.utils.deprecation import MiddlewareMixin
+from opentelemetry import trace
 
 
 class CorrelationIdMiddleware(MiddlewareMixin):

@@ -44,10 +44,7 @@ describe('GraphGateway', () => {
     });
 
     expect(pong.event).toBe('pong');
-    expect((gateway as any).server.emit).toHaveBeenCalledWith(
-      'graph_update',
-      expect.objectContaining({ eventType: 'edge_added' }),
-    );
+    expect((gateway as any).server.emit).not.toHaveBeenCalled();
     expect((gateway as any).server.to).toHaveBeenCalledWith('edge_added');
     expect((gateway as any).server.to).toHaveBeenCalledWith('all');
   });

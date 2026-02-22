@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import os
 
-from django.db import connection
-from django.http import JsonResponse, HttpResponse
-from django.views.decorators.http import require_GET
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 import redis
+from django.db import connection
+from django.http import HttpResponse, JsonResponse
+from django.views.decorators.http import require_GET
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 
 @require_GET

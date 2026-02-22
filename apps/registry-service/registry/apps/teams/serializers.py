@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.teams.models import Team, TeamMembership, ServiceOwnership
+from apps.teams.models import ServiceOwnership, Team, TeamMembership
 
 
 class TeamSerializer(serializers.ModelSerializer):

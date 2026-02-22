@@ -13,7 +13,7 @@ import { GraphUpdateEventDto } from './dto';
   cors: {
     origin: (process.env.CORS_ORIGINS || 'http://localhost:4200,http://127.0.0.1:4200')
       .split(',')
-      .map((origin) => origin.trim())
+      .map((origin: string) => origin.trim())
       .filter(Boolean),
   },
   namespace: '/graph',
@@ -84,9 +84,6 @@ export class GraphGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // Emit graph update to all connected clients
   emitGraphUpdate(event: GraphUpdateEventDto) {
     this.logger.debug(`Emitting graph update: ${event.eventType}`);
-
-    // Emit to all clients
-    this.server.emit('graph_update', event);
 
     // Also emit to specific event type room
     this.server.to(event.eventType).emit('graph_update', event);

@@ -10,6 +10,10 @@ NestJS 11 auth gateway for Ripplemark.
 - PostgreSQL user storage via TypeORM
 - Health checks, Swagger, throttling, Helmet, CORS
 
+Local note:
+- For routine local testing, prefer email/password login from `infra/docker/.env` defaults.
+- Treat Google OAuth local flow as optional verification only.
+
 ## Run
 ```bash
 npm install

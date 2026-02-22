@@ -1,7 +1,8 @@
+import uuid
+
+import django.db.models.deletion
 from django.conf import settings
 from django.db import migrations, models
-import django.db.models.deletion
-import uuid
 from django.db.models import F, Value
 from django.db.models.functions import Lower, Replace
 

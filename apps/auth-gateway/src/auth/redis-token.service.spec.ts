@@ -8,6 +8,9 @@ jest.mock('ioredis', () => {
       set: jest.fn(),
       get: jest.fn(),
       del: jest.fn(),
+      ping: jest.fn().mockResolvedValue('PONG'),
+      quit: jest.fn().mockResolvedValue('OK'),
+      disconnect: jest.fn(),
     })),
   };
 });
@@ -29,5 +32,16 @@ describe('RedisTokenService', () => {
 
     await service.invalidateRefreshToken('u1', 't1');
     expect(redis.del).toHaveBeenCalledWith('refresh:u1:t1');
+  });
+
+  it('closes redis connection on module destroy', async () => {
+    const config = { getOrThrow: () => 'redis://localhost:6379' } as unknown as ConfigService;
+    const service = new RedisTokenService(config);
+    const redis = (service as any).redis;
+
+    await service.onModuleDestroy();
+
+    expect(redis.quit).toHaveBeenCalled();
+    expect(redis.disconnect).not.toHaveBeenCalled();
   });
 });

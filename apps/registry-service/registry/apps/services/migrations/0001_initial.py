@@ -1,6 +1,7 @@
-from django.db import migrations, models
-import django.db.models.deletion
 import uuid
+
+import django.db.models.deletion
+from django.db import migrations, models
 from django.db.models import Q
 
 

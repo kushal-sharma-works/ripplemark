@@ -1,11 +1,10 @@
 import { ChangeDetectionStrategy, Component, model, output, input } from '@angular/core';
-import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { ButtonModule } from 'primeng/button';
 
 @Component({
   selector: 'app-confirm-dialog',
   standalone: true,
-  imports: [ConfirmDialogModule, ButtonModule],
+  imports: [ButtonModule],
   template: `
     @if (visible()) {
       <div class="fixed inset-0 bg-black/40 grid place-items-center z-50">

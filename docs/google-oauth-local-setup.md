@@ -1,6 +1,6 @@
-# Google OAuth Local Setup (End-to-End)
+# Google OAuth Local Setup (Reference)
 
-Use this guide to make Google login work locally without committing secrets.
+Use this guide as a reference for local OAuth verification without committing secrets.
 
 ## Local Testing Recommendation
 

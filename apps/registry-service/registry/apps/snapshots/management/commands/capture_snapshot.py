@@ -1,7 +1,7 @@
-from django.core.management.base import BaseCommand
 import httpx
-
 from django.conf import settings
+from django.core.management.base import BaseCommand
+
 from apps.snapshots.models import DependencySnapshot
 
 
