@@ -4,7 +4,7 @@
 
 Install the following locally before starting:
 
-- Node.js 22.x
+- Node.js 20.x LTS
 - Python 3.12
 - Docker (with Compose v2)
 - kubectl
@@ -33,6 +33,22 @@ Expected local ports:
 - Topology Service: `http://localhost:3001`
 - Analysis Service: `http://localhost:8000`
 - Registry Service: `http://localhost:8001`
+
+Default local login fallback (without Google OAuth):
+
+- Email: `integration-admin@ripplemark.local`
+- Password: `IntegrationPass123!`
+
+Local login note:
+
+- Do not use Google login for local testing right now.
+- Use the email/password fallback credentials above.
+
+Override via `infra/docker/.env`:
+
+- `LOCAL_DEFAULT_USER_EMAIL`
+- `LOCAL_DEFAULT_USER_PASSWORD`
+- `LOCAL_DEFAULT_USER_DISPLAY_NAME`
 
 ## 3) Run integration-test stack (ephemeral data)
 
@@ -137,6 +153,11 @@ npm run test:cov
 
 ## 7) Common troubleshooting
 
+### Google OAuth login setup
+- Google OAuth is currently not the recommended local login path.
+- Use fallback credentials for local testing.
+- Keep [docs/google-oauth-local-setup.md](google-oauth-local-setup.md) as reference only.
+
 ### Docker compose fails with port already in use
 - Stop conflicting local services or change port values in `infra/docker/.env`.
 
@@ -150,7 +171,7 @@ npm run test:cov
 
 ### Node dependency mismatch
 - Remove `node_modules` and reinstall (`npm install`).
-- Check Node version is 22.x.
+- Check Node version is 20.x LTS.
 
 ### Auth failures (401/403)
 - Ensure JWT secret and gateway auth env vars are consistent.

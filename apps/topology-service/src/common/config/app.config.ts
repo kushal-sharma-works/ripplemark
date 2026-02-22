@@ -12,6 +12,8 @@ export const configValidationSchema = Joi.object({
   REDIS_HOST: Joi.string().default('localhost'),
   REDIS_PORT: Joi.number().default(6379),
   MONGO_URI: Joi.string().default('mongodb://localhost:27017/topology'),
+  CORS_ORIGINS: Joi.string().default('http://localhost:4200,http://127.0.0.1:4200'),
+  REQUIRE_GATEWAY_AUTH: Joi.boolean().default(false),
   GRAPH_CACHE_TTL: Joi.number().default(300), // 5 minutes
   MAX_DEPTH: Joi.number().default(10),
 });
@@ -24,6 +26,8 @@ export interface AppConfig {
   redisHost: string;
   redisPort: number;
   mongoUri: string;
+  corsOrigins: string;
+  requireGatewayAuth: boolean;
   graphCacheTtl: number;
   maxDepth: number;
 }
@@ -36,6 +40,8 @@ export const getAppConfig = (): AppConfig => ({
   redisHost: process.env.REDIS_HOST || 'localhost',
   redisPort: parseInt(process.env.REDIS_PORT || '6379', 10),
   mongoUri: process.env.MONGO_URI || 'mongodb://localhost:27017/topology',
+  corsOrigins: process.env.CORS_ORIGINS || 'http://localhost:4200,http://127.0.0.1:4200',
+  requireGatewayAuth: process.env.REQUIRE_GATEWAY_AUTH === 'true',
   graphCacheTtl: parseInt(process.env.GRAPH_CACHE_TTL || '300', 10),
   maxDepth: parseInt(process.env.MAX_DEPTH || '10', 10),
 });

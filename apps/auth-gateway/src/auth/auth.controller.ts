@@ -45,7 +45,7 @@ export class AuthController {
   ) {
     const tokens = await this.authService.oauthLogin(req.user.email, req.user.displayName);
     const webAppUrl = this.config.get<string>('WEB_APP_URL', 'http://localhost:4200');
-    const redirectUrl = `${webAppUrl}/login/google-callback?accessToken=${encodeURIComponent(tokens.accessToken)}&refreshToken=${encodeURIComponent(tokens.refreshToken)}`;
+    const redirectUrl = `${webAppUrl}/login/google-callback#accessToken=${encodeURIComponent(tokens.accessToken)}&refreshToken=${encodeURIComponent(tokens.refreshToken)}`;
 
     return res.redirect(HttpStatus.FOUND, redirectUrl);
   }

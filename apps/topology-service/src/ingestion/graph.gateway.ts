@@ -11,7 +11,10 @@ import { GraphUpdateEventDto } from './dto';
 
 @WebSocketGateway({
   cors: {
-    origin: '*', // Configure properly in production
+    origin: (process.env.CORS_ORIGINS || 'http://localhost:4200,http://127.0.0.1:4200')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
   },
   namespace: '/graph',
 })

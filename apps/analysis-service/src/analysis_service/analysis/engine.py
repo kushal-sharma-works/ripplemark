@@ -35,7 +35,8 @@ class ImpactAnalysisEngine:
         if source not in adjacency:
             return {}
 
-        visited: Dict[str, int] = {}
+        visited = {source}
+        affected: Dict[str, int] = {}
         queue: List[tuple[str, int]] = [(source, 0)]
         while queue:
             node, depth = queue.pop(0)
@@ -43,9 +44,10 @@ class ImpactAnalysisEngine:
                 continue
             for neighbor in adjacency.get(node, []):
                 if neighbor not in visited:
-                    visited[neighbor] = depth + 1
+                    visited.add(neighbor)
+                    affected[neighbor] = depth + 1
                     queue.append((neighbor, depth + 1))
-        return visited
+        return affected
 
     def compute_risk_score(
         self,

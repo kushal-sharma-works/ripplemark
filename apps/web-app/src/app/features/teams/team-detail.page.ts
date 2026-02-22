@@ -6,6 +6,19 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService, PaginatedResponse } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 
+type MembershipRow = {
+  id: string;
+  team: string;
+  role: string;
+  user: string | { username?: string; email?: string };
+};
+
+type MemberView = {
+  id: string;
+  name: string;
+  role: string;
+};
+
 @Component({
   standalone: true,
   selector: 'app-team-detail-page',
@@ -22,7 +35,7 @@ import { AuthService } from '../../core/services/auth.service';
           <td>{{ member.role }}</td>
           <td>
             @if (isAdmin()) {
-              <button pButton size="small" label="Manage"></button>
+              <button pButton size="small" label="Manage" (click)="manageMember(member)"></button>
             }
           </td>
         </tr>
@@ -38,7 +51,9 @@ export class TeamDetailPage {
 
   readonly teamId = this.route.snapshot.paramMap.get('id') ?? 'unknown';
   readonly isAdmin = computed(() => this.auth.isAdmin());
-  readonly members = signal<Array<{ name: string; role: string }>>([]);
+  readonly members = signal<MemberView[]>([]);
+
+  private readonly allowedRoles = new Set(['admin', 'team_lead', 'engineer', 'viewer']);
 
   constructor() {
     void this.loadMembers();
@@ -47,9 +62,7 @@ export class TeamDetailPage {
   private async loadMembers(): Promise<void> {
     try {
       const memberships = await firstValueFrom(
-        this.api.get<
-          PaginatedResponse<{ team: string; role: string; user: string }> | Array<{ team: string; role: string; user: string }>
-        >('/api/registry/team-memberships/'),
+        this.api.get<PaginatedResponse<MembershipRow> | MembershipRow[]>('/api/registry/team-memberships/'),
       );
       const membershipRows = this.api.extractCollection(memberships);
 
@@ -57,12 +70,39 @@ export class TeamDetailPage {
         membershipRows
           .filter((membership) => membership.team === this.teamId)
           .map((membership) => ({
-            name: membership.user,
+            id: membership.id,
+            name:
+              typeof membership.user === 'string'
+                ? membership.user
+                : String(membership.user.username ?? membership.user.email ?? 'unknown-user'),
             role: membership.role,
           })),
       );
     } catch {
       this.members.set([]);
+    }
+  }
+
+  async manageMember(member: MemberView): Promise<void> {
+    const roleInput = window.prompt(
+      `Set role for ${member.name} (admin, team_lead, engineer, viewer):`,
+      member.role,
+    );
+    if (roleInput === null) {
+      return;
+    }
+
+    const role = roleInput.trim();
+    if (!this.allowedRoles.has(role)) {
+      window.alert('Invalid role. Use one of: admin, team_lead, engineer, viewer.');
+      return;
+    }
+
+    try {
+      await firstValueFrom(this.api.patch(`/api/registry/team-memberships/${member.id}/`, { role }));
+      this.members.update((rows) => rows.map((row) => (row.id === member.id ? { ...row, role } : row)));
+    } catch {
+      window.alert('Failed to update member role. Please try again.');
     }
   }
 }
