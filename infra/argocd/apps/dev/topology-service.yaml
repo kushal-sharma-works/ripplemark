@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: topology-service-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: ripplemark
+    env: dev
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/kushal-sharma-works/ripplemark.git
+    targetRevision: main
+    path: infra/helm/topology-service
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ripplemark
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

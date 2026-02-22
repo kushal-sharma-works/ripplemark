@@ -1,0 +1,58 @@
+name: Security Scanning
+
+on:
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '0 4 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check dependency graph status
+        id: depgraph
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: repo } = await github.rest.repos.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const status = repo.security_and_analysis?.dependency_graph?.status ?? 'disabled';
+            core.notice(`dependency_graph status: ${status}`);
+            core.setOutput('enabled', status === 'enabled' ? 'true' : 'false');
+
+      - name: Run dependency review
+        if: steps.depgraph.outputs.enabled == 'true'
+        uses: actions/dependency-review-action@v4
+
+      - name: Skip dependency review (dependency graph disabled)
+        if: steps.depgraph.outputs.enabled != 'true'
+        run: echo "Skipping dependency review because dependency graph is disabled for this repository."
+
+  codeql:
+    name: CodeQL scan
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        language: [javascript-typescript, python]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+

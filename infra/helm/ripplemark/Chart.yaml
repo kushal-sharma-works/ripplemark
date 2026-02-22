@@ -1,0 +1,28 @@
+apiVersion: v2
+name: ripplemark
+description: Umbrella Helm chart for Ripplemark platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+dependencies:
+  - name: topology-service
+    version: 0.1.0
+    repository: file://../topology-service
+    condition: topology-service.enabled
+  - name: analysis-service
+    version: 0.1.0
+    repository: file://../analysis-service
+    condition: analysis-service.enabled
+  - name: registry-service
+    version: 0.1.0
+    repository: file://../registry-service
+    condition: registry-service.enabled
+  - name: auth-gateway
+    version: 0.1.0
+    repository: file://../auth-gateway
+    condition: auth-gateway.enabled
+  - name: web-app
+    version: 0.1.0
+    repository: file://../web-app
+    condition: web-app.enabled

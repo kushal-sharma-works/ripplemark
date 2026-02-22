@@ -1,0 +1,230 @@
+openapi: 3.1.0
+info:
+  title: Ripplemark Auth Gateway API
+  version: 1.0.0
+  description: Authentication, token lifecycle, and user access APIs.
+servers:
+  - url: https://api.ripplemark.local/auth
+paths:
+  /auth/login:
+    post:
+      summary: Login with email/password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string, format: email, example: admin@ripplemark.io }
+                password: { type: string, minLength: 8, example: Password123! }
+              required: [email, password]
+      responses:
+        '201':
+          description: Issued access and refresh token pair
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string, example: eyJhbGciOi... }
+                  refreshToken: { type: string, example: eyJhbGciOi... }
+                required: [accessToken, refreshToken]
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /auth/refresh:
+    post:
+      summary: Refresh access token using refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken: { type: string, example: eyJhbGciOi... }
+              required: [refreshToken]
+      responses:
+        '201':
+          description: New token pair
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken: { type: string }
+                  refreshToken: { type: string }
+                required: [accessToken, refreshToken]
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /auth/logout:
+    post:
+      summary: Invalidate refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken: { type: string }
+              required: [refreshToken]
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Logout result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                required: [success]
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /users:
+    get:
+      summary: List users
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /health:
+    get:
+      security: []
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: Request validation failed
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples: { default: { value: { statusCode: 400, message: Bad Request } } }
+    Unauthorized:
+      description: Missing/invalid token or bad credentials
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples: { default: { value: { statusCode: 401, message: Unauthorized } } }
+    Forbidden:
+      description: User lacks permission
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples: { default: { value: { statusCode: 403, message: Forbidden } } }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples: { default: { value: { statusCode: 404, message: Not Found } } }
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+          examples: { default: { value: { statusCode: 500, message: Internal Server Error } } }
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        statusCode: { type: integer }
+        message: { type: string }
+      required: [statusCode, message]
+    ServiceNode:
+      type: object
+      properties:
+        id: { type: string, example: auth-gateway }
+        name: { type: string, example: auth-gateway }
+        type: { type: string, example: api }
+        teamId: { type: string, example: platform }
+        status: { type: string, enum: [healthy, degraded, down], example: healthy }
+        version: { type: string, example: 1.0.0 }
+      required: [id, name, type, teamId, status, version]
+    DependencyEdge:
+      type: object
+      properties:
+        source: { type: string, example: web-app }
+        target: { type: string, example: auth-gateway }
+        type: { type: string, enum: [sync, async], example: sync }
+      required: [source, target, type]
+    ChangeProposal:
+      type: object
+      properties:
+        serviceId: { type: string, example: auth-gateway }
+        changeType: { type: string, enum: [api, schema, infra, config], example: config }
+        title: { type: string, example: Rotate JWT issuer }
+        description: { type: string, example: Update OIDC issuer and audience validation }
+      required: [serviceId, changeType, title, description]
+    ImpactResult:
+      type: object
+      properties:
+        riskScore: { $ref: '#/components/schemas/RiskScore' }
+        affectedServices:
+          type: array
+          items:
+            type: object
+            properties:
+              service: { type: string, example: web-app }
+              reason: { type: string, example: Auth flow change }
+            required: [service, reason]
+      required: [riskScore, affectedServices]
+    RiskScore:
+      type: integer
+      minimum: 0
+      maximum: 100
+      example: 41
+    Team:
+      type: object
+      properties:
+        id: { type: string, example: security }
+        name: { type: string, example: Security Team }
+      required: [id, name]
+    User:
+      type: object
+      properties:
+        id: { type: string, example: user-1 }
+        email: { type: string, format: email, example: admin@ripplemark.io }
+        roles:
+          type: array
+          items: { type: string, example: admin }
+      required: [id, email, roles]

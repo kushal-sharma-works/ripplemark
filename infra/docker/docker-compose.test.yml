@@ -1,0 +1,37 @@
+services:
+  postgres:
+    volumes: !reset []
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  mongodb:
+    volumes: !reset []
+    tmpfs:
+      - /data/db
+
+  redis:
+    volumes: !reset []
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  nats:
+    volumes: !reset []
+    command: ["-js", "-sd", "/tmp/nats", "-m", "8222"]
+
+  topology-service:
+    environment:
+      NODE_ENV: test
+
+  analysis-service:
+    environment:
+      ENVIRONMENT: test
+
+  registry-service:
+    environment:
+      DJANGO_SETTINGS_MODULE: registry.settings.test
+
+  auth-gateway:
+    environment:
+      NODE_ENV: test
+
+  web-app:
+    profiles: ["skip"]

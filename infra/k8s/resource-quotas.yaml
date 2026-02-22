@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: ripplemark-quota
+  namespace: ripplemark
+spec:
+  hard:
+    requests.cpu: "6"
+    requests.memory: 8Gi
+    limits.cpu: "12"
+    limits.memory: 16Gi
+    pods: "120"
+    services: "30"
+    persistentvolumeclaims: "20"

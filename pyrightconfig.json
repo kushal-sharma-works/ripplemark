@@ -1,0 +1,15 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.12",
+  "include": [
+    "apps/analysis-service/src",
+    "apps/analysis-service/tests",
+    "apps/registry-service/registry",
+    "tests/integration"
+  ],
+  "extraPaths": [
+    "apps/analysis-service/src",
+    "apps/registry-service/registry"
+  ]
+}

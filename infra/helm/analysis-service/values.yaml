@@ -1,0 +1,33 @@
+replicaCount: 2
+image:
+  repository: ghcr.io/kushal-sharma-works/ripplemark-analysis-service
+  tag: latest
+  pullPolicy: IfNotPresent
+service:
+  type: ClusterIP
+  port: 8000
+ingress:
+  enabled: true
+  className: nginx
+  host: analysis.dev.ripplemark.local
+  path: /
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { cpu: 500m, memory: 512Mi }
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 75
+config:
+  ENVIRONMENT: development
+  PORT: "8000"
+secret:
+  sealedSecretName: analysis-service-secrets
+probes:
+  livenessPath: /health
+  readinessPath: /health
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  readOnlyRootFilesystem: true

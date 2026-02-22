@@ -1,0 +1,15 @@
+name: Continuous Deployment
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cd-disabled:
+    name: CD disabled for this branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip
+        run: echo "CD workflow is disabled on this branch."
