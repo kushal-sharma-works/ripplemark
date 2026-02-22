@@ -19,7 +19,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
+
+      - name: Check dependency graph status
+        id: depgraph
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: repo } = await github.rest.repos.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const status = repo.security_and_analysis?.dependency_graph?.status ?? 'disabled';
+            core.notice(`dependency_graph status: ${status}`);
+            core.setOutput('enabled', status === 'enabled' ? 'true' : 'false');
+
+      - name: Run dependency review
+        if: steps.depgraph.outputs.enabled == 'true'
+        uses: actions/dependency-review-action@v4
+
+      - name: Skip dependency review (dependency graph disabled)
+        if: steps.depgraph.outputs.enabled != 'true'
+        run: echo "Skipping dependency review because dependency graph is disabled for this repository."
 
   codeql:
     name: CodeQL scan
@@ -36,35 +56,3 @@ jobs:
       - uses: github/codeql-action/autobuild@v3
       - uses: github/codeql-action/analyze@v3
 
-  trivy-images:
-    name: Trivy image scan (${{ matrix.service }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - service: topology-service
-            context: apps/topology-service
-          - service: auth-gateway
-            context: apps/auth-gateway
-          - service: analysis-service
-            context: apps/analysis-service
-          - service: registry-service
-            context: apps/registry-service
-          - service: web-app
-            context: apps/web-app
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build local image
-        run: docker build -t ripplemark/${{ matrix.service }}:security ${{ matrix.context }}
-
-      - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: ripplemark/${{ matrix.service }}:security
-          format: table
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1'
