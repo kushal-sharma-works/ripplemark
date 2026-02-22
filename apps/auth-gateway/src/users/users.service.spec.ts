@@ -54,7 +54,9 @@ describe('UsersService', () => {
   });
 
   it('findByEmail returns user or null', async () => {
-    usersRepo.findOne.mockResolvedValueOnce({ id: 'u1', email: 'x@y.com' }).mockResolvedValueOnce(null);
+    usersRepo.findOne
+      .mockResolvedValueOnce({ id: 'u1', email: 'x@y.com' })
+      .mockResolvedValueOnce(null);
     await expect(service.findByEmail('x@y.com')).resolves.toEqual({ id: 'u1', email: 'x@y.com' });
     await expect(service.findByEmail('missing@y.com')).resolves.toBeNull();
   });

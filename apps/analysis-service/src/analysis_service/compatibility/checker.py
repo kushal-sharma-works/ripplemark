@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from analysis_service.schemas.compatibility import (
     CompatibilityRequest,
@@ -10,11 +10,11 @@ from analysis_service.schemas.compatibility import (
 
 
 class CompatibilityChecker:
-    def extract_schemas(self, schema: Dict[str, Any]) -> Dict[str, Any]:
+    def extract_schemas(self, schema: dict[str, Any]) -> dict[str, Any]:
         return schema.get("components", {}).get("schemas", {})
 
-    def compare_objects(self, before: Dict[str, Any], after: Dict[str, Any]) -> List[FieldDiff]:
-        diffs: List[FieldDiff] = []
+    def compare_objects(self, before: dict[str, Any], after: dict[str, Any]) -> list[FieldDiff]:
+        diffs: list[FieldDiff] = []
         before_props = before.get("properties", {})
         after_props = after.get("properties", {})
         before_required = set(before.get("required", []))
@@ -41,8 +41,8 @@ class CompatibilityChecker:
         before_schemas = self.extract_schemas(request.before_schema)
         after_schemas = self.extract_schemas(request.after_schema)
 
-        breaking_changes: List[FieldDiff] = []
-        safe_changes: List[FieldDiff] = []
+        breaking_changes: list[FieldDiff] = []
+        safe_changes: list[FieldDiff] = []
 
         for name, before in before_schemas.items():
             after = after_schemas.get(name, {})

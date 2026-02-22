@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import networkx as nx
-from hypothesis import given, strategies as st
+from hypothesis import given
+from hypothesis import strategies as st
 
 from analysis_service.analysis.engine import ImpactAnalysisEngine
 from analysis_service.schemas.analysis import ChangeProposal

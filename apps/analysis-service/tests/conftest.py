@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from analysis_service.main import app
 from analysis_service.core.http_client import TopologyClient
+from analysis_service.main import app
 
 
 @pytest.fixture()

@@ -21,7 +21,10 @@ async function seedLocalDefaultUser(app: Awaited<ReturnType<typeof NestFactory.c
     return;
   }
 
-  const configuredEmail = config.get<string>('LOCAL_DEFAULT_USER_EMAIL', 'integration-admin@ripplemark.local');
+  const configuredEmail = config.get<string>(
+    'LOCAL_DEFAULT_USER_EMAIL',
+    'integration-admin@ripplemark.local',
+  );
   const email = configuredEmail.includes('@')
     ? configuredEmail
     : 'integration-admin@ripplemark.local';

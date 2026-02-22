@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 import networkx as nx
 
 from analysis_service.schemas.simulation import (
+    SimulationMetric,
     SimulationRequest,
     SimulationResult,
-    SimulationMetric,
 )
 
 
 class SimulationEngine:
-    def build_graph(self, graph: Dict[str, Any]) -> nx.DiGraph:
+    def build_graph(self, graph: dict[str, Any]) -> nx.DiGraph:
         g = nx.DiGraph()
         for node in graph.get("nodes", []):
             g.add_node(node["id"], **node)
@@ -25,20 +25,20 @@ class SimulationEngine:
             )
         return g
 
-    def simulate(self, request: SimulationRequest, graph: Dict[str, Any]) -> SimulationResult:
+    def simulate(self, request: SimulationRequest, graph: dict[str, Any]) -> SimulationResult:
         g = self.build_graph(graph)
         affected = list(nx.descendants(g, request.service_name))
 
         cascade_prob = min(1.0, 0.15 * len(affected))
-        latency_impact = sum(
-            data.get("latency", 0) for _, _, data in g.edges(data=True)
-        ) / max(1, g.number_of_edges())
+        latency_impact = sum(data.get("latency", 0) for _, _, data in g.edges(data=True)) / max(
+            1, g.number_of_edges()
+        )
 
         timeout_chain = [
             node for node in affected if nx.shortest_path_length(g, request.service_name, node) > 2
         ]
 
-        metrics: List[SimulationMetric] = [
+        metrics: list[SimulationMetric] = [
             SimulationMetric(
                 name="cascading_failure_probability",
                 value=round(cascade_prob, 3),

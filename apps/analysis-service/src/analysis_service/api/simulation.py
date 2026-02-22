@@ -16,7 +16,6 @@ async def run_simulation(
     request: SimulationRequest,
     client: TopologyClient = Depends(get_topology_client),
 ):
-    with tracer.start_as_current_span("simulation.run"):
-        with simulation_duration_seconds.time():
-            graph = await client.fetch_graph()
-            return engine.simulate(request, graph)
+    with tracer.start_as_current_span("simulation.run"), simulation_duration_seconds.time():
+        graph = await client.fetch_graph()
+        return engine.simulate(request, graph)

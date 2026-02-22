@@ -34,7 +34,8 @@ describe('ProxyMiddleware', () => {
     proxyConfigs.length = 0;
   });
 
-  const token = () => new JwtService({ secret: 'test-secret' }).sign({ sub: 'u1', roles: ['admin'], teams: ['t1'] });
+  const token = () =>
+    new JwtService({ secret: 'test-secret' }).sign({ sub: 'u1', roles: ['admin'], teams: ['t1'] });
 
   it('routes topology requests', async () => {
     const middleware = new ProxyMiddleware(config);
@@ -44,7 +45,11 @@ describe('ProxyMiddleware', () => {
     };
     const next = jest.fn();
 
-    await middleware.use(req as any, { status: jest.fn().mockReturnThis(), json: jest.fn() } as any, next);
+    await middleware.use(
+      req as any,
+      { status: jest.fn().mockReturnThis(), json: jest.fn() } as any,
+      next,
+    );
     expect(proxyHandlers[0]).toHaveBeenCalled();
     expect(proxyHandlers[1]).not.toHaveBeenCalled();
     expect(proxyHandlers[2]).not.toHaveBeenCalled();

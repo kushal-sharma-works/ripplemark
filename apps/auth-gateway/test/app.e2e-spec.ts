@@ -24,10 +24,9 @@ describe('Auth flow (e2e)', () => {
 
     const moduleBuilder = Test.createTestingModule({
       controllers: [AuthController],
-      providers: [
-        { provide: AuthService, useValue: authService },
-      ],
-    }).overrideGuard(LocalAuthGuard)
+      providers: [{ provide: AuthService, useValue: authService }],
+    })
+      .overrideGuard(LocalAuthGuard)
       .useValue(localGuard);
 
     const moduleRef = await moduleBuilder.compile();

@@ -1,9 +1,9 @@
 import uuid
-from typing import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
+import structlog
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
-import structlog
 
 CORRELATION_ID_HEADER = "x-correlation-id"
 

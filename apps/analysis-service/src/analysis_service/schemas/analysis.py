@@ -1,4 +1,4 @@
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,7 +14,7 @@ class ChangeProposal(BaseModel):
         "deprecation",
         "version_bump",
     ]
-    details: Optional[str] = None
+    details: str | None = None
     max_depth: int = Field(default=5, ge=1, le=20)
 
 
@@ -33,7 +33,7 @@ class ImpactAssessment(BaseModel):
 
     service_id: str
     change_type: str
-    affected_services: List[str]
+    affected_services: list[str]
     risk_score: int
     backward_compatibility: str
-    impact_details: List[ImpactServiceDetail]
+    impact_details: list[ImpactServiceDetail]

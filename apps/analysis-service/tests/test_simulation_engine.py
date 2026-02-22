@@ -1,5 +1,5 @@
-from analysis_service.simulation.engine import SimulationEngine
 from analysis_service.schemas.simulation import SimulationRequest
+from analysis_service.simulation.engine import SimulationEngine
 
 
 def test_simulation_outputs_metrics(sample_graph):

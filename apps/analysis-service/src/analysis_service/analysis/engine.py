@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from analysis_service.core.errors import AnalysisServiceError
 from analysis_service.core.logging import get_logger
@@ -22,22 +22,22 @@ CHANGE_SEVERITY = {
 
 
 class ImpactAnalysisEngine:
-    def build_adjacency(self, graph: Dict[str, Any]) -> Dict[str, List[str]]:
+    def build_adjacency(self, graph: dict[str, Any]) -> dict[str, list[str]]:
         edges = graph.get("edges", [])
-        adjacency: Dict[str, List[str]] = {}
+        adjacency: dict[str, list[str]] = {}
         for edge in edges:
             adjacency.setdefault(edge["source"], []).append(edge["target"])
         return adjacency
 
     def traverse_dependencies(
-        self, adjacency: Dict[str, List[str]], source: str, max_depth: int
-    ) -> Dict[str, int]:
+        self, adjacency: dict[str, list[str]], source: str, max_depth: int
+    ) -> dict[str, int]:
         if source not in adjacency:
             return {}
 
         visited = {source}
-        affected: Dict[str, int] = {}
-        queue: List[tuple[str, int]] = [(source, 0)]
+        affected: dict[str, int] = {}
+        queue: list[tuple[str, int]] = [(source, 0)]
         while queue:
             node, depth = queue.pop(0)
             if depth >= max_depth:
@@ -52,8 +52,8 @@ class ImpactAnalysisEngine:
     def compute_risk_score(
         self,
         change_type: str,
-        affected: Dict[str, int],
-        nodes: Dict[str, Any],
+        affected: dict[str, int],
+        nodes: dict[str, Any],
     ) -> int:
         severity = CHANGE_SEVERITY.get(change_type, 10)
         total = severity
@@ -75,11 +75,11 @@ class ImpactAnalysisEngine:
 
     def build_explanations(
         self,
-        affected: Dict[str, int],
-        nodes: Dict[str, Any],
+        affected: dict[str, int],
+        nodes: dict[str, Any],
         change: ChangeProposal,
-    ) -> List[ImpactServiceDetail]:
-        details: List[ImpactServiceDetail] = []
+    ) -> list[ImpactServiceDetail]:
+        details: list[ImpactServiceDetail] = []
         for service_id, depth in affected.items():
             node = nodes.get(service_id, {})
             name = node.get("name", service_id)
@@ -98,16 +98,14 @@ class ImpactAnalysisEngine:
             )
         return details
 
-    def analyze(self, change: ChangeProposal, graph: Dict[str, Any]) -> ImpactAssessment:
+    def analyze(self, change: ChangeProposal, graph: dict[str, Any]) -> ImpactAssessment:
         nodes = {node["id"]: node for node in graph.get("nodes", [])}
 
         if change.service_name not in nodes:
             raise AnalysisServiceError("Service not found in graph", code="service_missing")
 
         adjacency = self.build_adjacency(graph)
-        affected = self.traverse_dependencies(
-            adjacency, change.service_name, change.max_depth
-        )
+        affected = self.traverse_dependencies(adjacency, change.service_name, change.max_depth)
         risk = self.compute_risk_score(change.change_type, affected, nodes)
         compatibility = self.backward_compatibility(change.change_type)
         details = self.build_explanations(affected, nodes, change)

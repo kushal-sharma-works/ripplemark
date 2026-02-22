@@ -1,5 +1,3 @@
-from typing import Any, List
-
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -21,5 +19,5 @@ class CompatibilityResult(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid")
 
     verdict: str
-    breaking_changes: List[FieldDiff]
-    safe_changes: List[FieldDiff]
+    breaking_changes: list[FieldDiff]
+    safe_changes: list[FieldDiff]

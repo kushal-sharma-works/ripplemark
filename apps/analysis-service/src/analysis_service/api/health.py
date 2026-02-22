@@ -1,10 +1,9 @@
-from fastapi import APIRouter
 import redis
+from fastapi import APIRouter, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from analysis_service.core.config import Settings
 from analysis_service.core.http_client import TopologyClient
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-from fastapi import Response
 
 router = APIRouter()
 settings = Settings()

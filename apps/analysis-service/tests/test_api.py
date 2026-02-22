@@ -1,7 +1,5 @@
 import pytest
 
-from analysis_service.schemas.analysis import ChangeProposal
-
 
 @pytest.mark.asyncio
 async def test_api_analysis(async_client):

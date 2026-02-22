@@ -60,7 +60,12 @@ describe('AuthService', () => {
 
   it('rejects invalid refresh token', async () => {
     const jwt = new JwtService({ secret: 'test' });
-    const svc = new AuthService(usersService as any, jwt, redisTokenService as any, configService as any);
+    const svc = new AuthService(
+      usersService as any,
+      jwt,
+      redisTokenService as any,
+      configService as any,
+    );
     const token = await jwt.signAsync(
       { sub: 'u1', jti: 'j1', typ: 'refresh' },
       { expiresIn: '7d' },
@@ -83,7 +88,12 @@ describe('AuthService', () => {
     usersService.updateLastLogin.mockResolvedValue(undefined);
 
     const jwt = new JwtService({ secret: 'test' });
-    const svc = new AuthService(usersService as any, jwt, redisTokenService as any, configService as any);
+    const svc = new AuthService(
+      usersService as any,
+      jwt,
+      redisTokenService as any,
+      configService as any,
+    );
     const token = await jwt.signAsync(
       { sub: 'u1', jti: 'j1', typ: 'refresh' },
       { expiresIn: '7d' },
@@ -97,15 +107,28 @@ describe('AuthService', () => {
 
   it('refresh rejects non-refresh token type', async () => {
     const jwt = new JwtService({ secret: 'test' });
-    const svc = new AuthService(usersService as any, jwt, redisTokenService as any, configService as any);
-    const token = await jwt.signAsync({ sub: 'u1', jti: 'j1', typ: 'access' }, { expiresIn: '15m' });
+    const svc = new AuthService(
+      usersService as any,
+      jwt,
+      redisTokenService as any,
+      configService as any,
+    );
+    const token = await jwt.signAsync(
+      { sub: 'u1', jti: 'j1', typ: 'access' },
+      { expiresIn: '15m' },
+    );
     await expect(svc.refresh(token)).rejects.toBeTruthy();
   });
 
   it('logout invalidates refresh token', async () => {
     redisTokenService.invalidateRefreshToken.mockResolvedValue(undefined);
     const jwt = new JwtService({ secret: 'test' });
-    const svc = new AuthService(usersService as any, jwt, redisTokenService as any, configService as any);
+    const svc = new AuthService(
+      usersService as any,
+      jwt,
+      redisTokenService as any,
+      configService as any,
+    );
     const token = await jwt.signAsync({ sub: 'u1', jti: 'j1' }, { expiresIn: '7d' });
 
     await svc.logout(token);
@@ -167,7 +190,12 @@ describe('AuthService', () => {
     usersService.updateLastLogin.mockResolvedValue(undefined);
 
     const jwt = new JwtService({ secret: 'test' });
-    const svc = new AuthService(usersService as any, jwt, redisTokenService as any, invalidTtlConfig as any);
+    const svc = new AuthService(
+      usersService as any,
+      jwt,
+      redisTokenService as any,
+      invalidTtlConfig as any,
+    );
 
     await svc.oauthLogin('existing@user.com', 'Existing User');
 
@@ -183,7 +211,12 @@ describe('AuthService', () => {
     usersService.updateLastLogin.mockResolvedValue(undefined);
 
     const jwt = new JwtService({ secret: 'test' });
-    const svc = new AuthService(usersService as any, jwt, redisTokenService as any, configService as any);
+    const svc = new AuthService(
+      usersService as any,
+      jwt,
+      redisTokenService as any,
+      configService as any,
+    );
 
     const result = await svc.issueTokens({
       id: 'u4',
@@ -196,6 +229,10 @@ describe('AuthService', () => {
 
     expect(result.accessToken).toBeDefined();
     expect(result.refreshToken).toBeDefined();
-    expect(redisTokenService.storeRefreshToken).toHaveBeenCalledWith('u4', expect.any(String), expect.any(Number));
+    expect(redisTokenService.storeRefreshToken).toHaveBeenCalledWith(
+      'u4',
+      expect.any(String),
+      expect.any(Number),
+    );
   });
 });
