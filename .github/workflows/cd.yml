@@ -166,16 +166,33 @@ jobs:
     needs:
       - detect-changes
       - build-and-push
-    if: needs.detect-changes.outputs.changed_csv != '' && secrets.ARGOCD_SERVER != '' && secrets.ARGOCD_AUTH_TOKEN != ''
+    if: needs.detect-changes.outputs.changed_csv != ''
     runs-on: ubuntu-latest
     steps:
+      - name: Check Argo CD credentials
+        id: argocd_gate
+        shell: bash
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+          ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${ARGOCD_SERVER}" && -n "${ARGOCD_AUTH_TOKEN}" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping Argo CD sync because ARGOCD_SERVER or ARGOCD_AUTH_TOKEN is not configured."
+          fi
+
       - name: Install Argo CD CLI
+        if: steps.argocd_gate.outputs.enabled == 'true'
         run: |
           curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
           chmod +x argocd
           sudo mv argocd /usr/local/bin/argocd
 
       - name: Sync changed dev applications
+        if: steps.argocd_gate.outputs.enabled == 'true'
         env:
           ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
           ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
