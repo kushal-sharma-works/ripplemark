@@ -107,7 +107,7 @@ jobs:
           version: 9
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --no-frozen-lockfile --prod=false
 
       - name: Lint
         run: pnpm lint
@@ -154,7 +154,19 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --extra dev
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f pyproject.toml ]]; then
+            echo "pyproject.toml not found in $PWD"
+            exit 1
+          fi
+
+          if grep -q '^\[project.optional-dependencies\]' pyproject.toml && grep -q '^dev\s*=' pyproject.toml; then
+            uv sync --extra dev
+          else
+            uv sync
+          fi
 
       - name: Lint (ruff check)
         run: uv run ruff check .
@@ -209,7 +221,7 @@ jobs:
           version: 9
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --no-frozen-lockfile --prod=false
 
       - name: Lint
         run: pnpm lint
