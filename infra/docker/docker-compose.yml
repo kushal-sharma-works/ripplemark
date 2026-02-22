@@ -69,6 +69,7 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       NATS_URL: nats://nats:4222
+      REQUIRE_GATEWAY_AUTH: ${REQUIRE_GATEWAY_AUTH:-false}
     ports:
       - "${TOPOLOGY_PORT}:${TOPOLOGY_PORT}"
     depends_on:
@@ -94,6 +95,7 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET}
       NATS_URL: nats://nats:4222
+      REQUIRE_GATEWAY_AUTH: ${REQUIRE_GATEWAY_AUTH:-false}
     ports:
       - "${ANALYSIS_PORT}:8000"
     depends_on:
@@ -165,6 +167,10 @@ services:
       ANALYSIS_SERVICE_URL: http://analysis-service:8000
       REGISTRY_SERVICE_URL: http://registry-service:8000
       NATS_URL: nats://nats:4222
+      LOCAL_SEED_DEFAULT_USER: ${LOCAL_SEED_DEFAULT_USER:-true}
+      LOCAL_DEFAULT_USER_EMAIL: ${LOCAL_DEFAULT_USER_EMAIL:-integration-admin@ripplemark.local}
+      LOCAL_DEFAULT_USER_PASSWORD: ${LOCAL_DEFAULT_USER_PASSWORD:-IntegrationPass123!}
+      LOCAL_DEFAULT_USER_DISPLAY_NAME: ${LOCAL_DEFAULT_USER_DISPLAY_NAME:-Integration Admin}
     ports:
       - "${AUTH_GATEWAY_PORT}:${AUTH_GATEWAY_PORT}"
     depends_on:

@@ -10,7 +10,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/kushal-sharma-works/ripplemark.git
-    targetRevision: feat/implementation-and-ehancements
+    targetRevision: main
     path: infra/helm/web-app
     helm:
       valueFiles:

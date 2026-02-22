@@ -39,6 +39,12 @@ After startup:
 - Analysis API: `http://localhost:8000`
 - Registry API: `http://localhost:8001`
 
+Local login for testing:
+
+- Email: `integration-admin@ripplemark.local`
+- Password: `IntegrationPass123!`
+- Prefer email/password for local runs (Google login is not the recommended local path right now).
+
 ## Tech Stack
 
 | Layer | Technology | Version |
@@ -61,6 +67,8 @@ After startup:
 - ADRs: [docs/decisions](docs/decisions)
 - Onboarding guide: [docs/onboarding.md](docs/onboarding.md)
 - API quick guide: [docs/api-guide.md](docs/api-guide.md)
+- Local run guide: [docs/local-run.md](docs/local-run.md)
+- Google OAuth local setup: [docs/google-oauth-local-setup.md](docs/google-oauth-local-setup.md)
 
 ## Project Structure
 
@@ -89,7 +97,7 @@ ripplemark/
 
 ## Contributing
 
-1. Create a branch from `feat/implementation-and-ehancements` (or the current integration base).
+1. Create a branch from the current integration base branch.
 2. Keep changes scoped to a single prompt/theme.
 3. Ensure tests/lint pass for modified services.
 4. Update docs/contracts when behavior changes.

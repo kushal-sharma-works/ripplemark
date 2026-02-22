@@ -81,4 +81,42 @@ describe('AuthService', () => {
     await expect(promise).resolves.toBeNull();
     expect(service.isAuthenticated()).toBe(false);
   });
+
+  it('login stores decoded user claims', async () => {
+    const payload = btoa(JSON.stringify({ sub: 'u1', email: 'u1@x.com', roles: ['admin', 'viewer'] }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/g, '');
+    const token = `x.${payload}.y`;
+
+    const promise = service.login('fallback@x.com', 'password123');
+    const req = httpMock.expectOne('/api/auth/login');
+    expect(req.request.method).toBe('POST');
+    req.flush({ accessToken: token, refreshToken: 'refresh-1' });
+
+    await promise;
+
+    expect(service.isAuthenticated()).toBe(true);
+    expect(service.user()).toEqual({ id: 'u1', email: 'u1@x.com', roles: ['admin', 'viewer'] });
+  });
+
+  it('completeOAuthLogin returns false on invalid token payload', () => {
+    const result = service.completeOAuthLogin('invalid-token', 'r1');
+    expect(result).toBe(false);
+    expect(service.isAuthenticated()).toBe(false);
+  });
+
+  it('completeOAuthLogin stores session for valid payload', () => {
+    const payload = btoa(JSON.stringify({ sub: 'oauth-user', email: 'oauth@x.com', roles: ['viewer'] }))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/g, '');
+    const token = `x.${payload}.y`;
+
+    const result = service.completeOAuthLogin(token, 'oauth-refresh');
+
+    expect(result).toBe(true);
+    expect(service.user()).toEqual({ id: 'oauth-user', email: 'oauth@x.com', roles: ['viewer'] });
+    expect(service.accessToken()).toBe(token);
+  });
 });

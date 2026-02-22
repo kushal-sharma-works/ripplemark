@@ -23,6 +23,10 @@ describe('ProxyMiddleware', () => {
       if (key === 'REGISTRY_SERVICE_URL') return 'http://registry';
       throw new Error('missing');
     },
+    get: (key: string) => {
+      if (key === 'REGISTRY_PROXY_TOKEN') return undefined;
+      return undefined;
+    },
   } as ConfigService;
 
   beforeEach(() => {

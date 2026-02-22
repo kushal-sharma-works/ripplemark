@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
@@ -12,7 +13,30 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly redisTokenService: RedisTokenService,
+    private readonly configService: ConfigService,
   ) {}
+
+  private getAccessTtl(): string {
+    return this.configService.get<string>('JWT_ACCESS_TTL', '15m');
+  }
+
+  private getRefreshTtl(): string {
+    return this.configService.get<string>('JWT_REFRESH_TTL', '7d');
+  }
+
+  private ttlToSeconds(ttl: string, fallbackSeconds: number): number {
+    const match = ttl.trim().match(/^(\d+)([smhd])$/i);
+    if (!match) return fallbackSeconds;
+    const value = Number(match[1]);
+    const unit = match[2].toLowerCase();
+    const multipliers: Record<string, number> = {
+      s: 1,
+      m: 60,
+      h: 60 * 60,
+      d: 24 * 60 * 60,
+    };
+    return value * multipliers[unit];
+  }
 
   async validateUser(email: string, password: string): Promise<User | null> {
     const user = await this.usersService.findByEmail(email);
@@ -30,14 +54,18 @@ export class AuthService {
   async issueTokens(user: User): Promise<{ accessToken: string; refreshToken: string }> {
     const claims = this.claimsFor(user);
     const refreshJti = uuidv4();
+    const accessTtl = this.getAccessTtl();
+    const refreshTtl = this.getRefreshTtl();
+    const accessTtlSeconds = this.ttlToSeconds(accessTtl, 15 * 60);
+    const refreshTtlSeconds = this.ttlToSeconds(refreshTtl, 7 * 24 * 60 * 60);
 
-    const accessToken = await this.jwtService.signAsync(claims, { expiresIn: '15m' });
+    const accessToken = await this.jwtService.signAsync(claims, { expiresIn: accessTtlSeconds });
     const refreshToken = await this.jwtService.signAsync(
       { ...claims, jti: refreshJti, typ: 'refresh' },
-      { expiresIn: '7d' },
+      { expiresIn: refreshTtlSeconds },
     );
 
-    await this.redisTokenService.storeRefreshToken(user.id, refreshJti, 7 * 24 * 60 * 60);
+    await this.redisTokenService.storeRefreshToken(user.id, refreshJti, refreshTtlSeconds);
     await this.usersService.updateLastLogin(user.id);
 
     return { accessToken, refreshToken };

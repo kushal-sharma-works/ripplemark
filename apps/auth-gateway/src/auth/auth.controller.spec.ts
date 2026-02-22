@@ -7,12 +7,18 @@ describe('AuthController', () => {
     refresh: jest.fn(),
     logout: jest.fn(),
   };
+  const configService = {
+    get: jest.fn((key: string, defaultValue?: string) => {
+      if (key === 'WEB_APP_URL') return 'http://localhost:4200';
+      return defaultValue;
+    }),
+  };
 
   let controller: AuthController;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    controller = new AuthController(authService as any);
+    controller = new AuthController(authService as any, configService as any);
   });
 
   it('login issues tokens', async () => {
@@ -27,9 +33,11 @@ describe('AuthController', () => {
   });
 
   it('googleCallback performs oauth login', async () => {
-    authService.oauthLogin.mockResolvedValue({ accessToken: 'a' });
-    await controller.googleCallback({ user: { email: 'x@y.com', displayName: 'X' } });
+    authService.oauthLogin.mockResolvedValue({ accessToken: 'a', refreshToken: 'r' });
+    const res = { redirect: jest.fn() } as any;
+    await controller.googleCallback({ user: { email: 'x@y.com', displayName: 'X' } }, res);
     expect(authService.oauthLogin).toHaveBeenCalledWith('x@y.com', 'X');
+    expect(res.redirect).toHaveBeenCalled();
   });
 
   it('refresh calls service', async () => {
