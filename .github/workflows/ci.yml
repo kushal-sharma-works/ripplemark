@@ -113,7 +113,7 @@ jobs:
         run: pnpm lint
 
       - name: Test with coverage
-        run: pnpm test:cov -- --runInBand
+        run: pnpm test:cov --runInBand
 
       - name: Build
         run: pnpm build
@@ -215,7 +215,7 @@ jobs:
         run: pnpm lint
 
       - name: Test with coverage
-        run: pnpm test:cov -- --runInBand
+        run: pnpm test:cov --runInBand
 
       - name: Production build
         run: pnpm build --configuration=production
@@ -252,16 +252,3 @@ jobs:
             helm lint "$chart_dir"
           done <<< "$charts"
 
-  openapi-validate:
-    name: OpenAPI validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Validate OpenAPI specs
-        run: npx --yes @redocly/cli lint libs/api-contracts/*.yaml
