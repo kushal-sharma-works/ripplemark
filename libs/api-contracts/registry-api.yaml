@@ -3,13 +3,17 @@ info:
   title: Ripplemark Registry API
   version: 1.0.0
   description: Service catalog, ownership, and snapshots APIs.
+  license:
+    name: MIT
+    identifier: MIT
 servers:
   - url: https://api.ripplemark.local/registry
 security:
   - bearerAuth: []
 paths:
-  /api/services/:
+  /api/services:
     get:
+      operationId: listServices
       summary: List services
       parameters:
         - in: query
@@ -33,10 +37,11 @@ paths:
                 required: [count, results]
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-              '403': { $ref: '#/components/responses/Forbidden' }
-              '404': { $ref: '#/components/responses/NotFound' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
     post:
+      operationId: registerService
       summary: Register service
       requestBody:
         required: true
@@ -54,8 +59,9 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
-  /api/services/{serviceId}/:
+  /api/services/{serviceId}:
     get:
+      operationId: getServiceDetails
       summary: Get service details
       parameters:
         - in: path
@@ -68,13 +74,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ServiceNode' }
-              '400': { $ref: '#/components/responses/BadRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-              '403': { $ref: '#/components/responses/Forbidden' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
-  /api/teams/:
+  /api/teams:
     get:
+      operationId: listTeams
       summary: List teams
       responses:
         '200':
@@ -84,13 +91,14 @@ paths:
               schema:
                 type: array
                 items: { $ref: '#/components/schemas/Team' }
-              '400': { $ref: '#/components/responses/BadRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-              '403': { $ref: '#/components/responses/Forbidden' }
-              '404': { $ref: '#/components/responses/NotFound' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
-  /api/snapshots/:
+  /api/snapshots:
     get:
+      operationId: listSnapshots
       summary: List snapshots
       responses:
         '200':
@@ -101,13 +109,14 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/GraphSnapshot'
-              '400': { $ref: '#/components/responses/BadRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-              '403': { $ref: '#/components/responses/Forbidden' }
-              '404': { $ref: '#/components/responses/NotFound' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
-  /api/snapshots/diff/:
+  /api/snapshots/diff:
     get:
+      operationId: compareSnapshots
       summary: Compare two snapshots
       parameters:
         - in: query
@@ -209,44 +218,9 @@ components:
           type: array
           items: { $ref: '#/components/schemas/DependencyEdge' }
       required: [id, capturedAt, nodes, edges]
-    ChangeProposal:
-      type: object
-      properties:
-        serviceId: { type: string, example: auth-gateway }
-        changeType: { type: string, enum: [api, schema, infra, config], example: infra }
-        title: { type: string, example: Upgrade database instance }
-        description: { type: string, example: Migrate to new postgres class }
-      required: [serviceId, changeType, title, description]
-    ImpactResult:
-      type: object
-      properties:
-        riskScore: { $ref: '#/components/schemas/RiskScore' }
-        affectedServices:
-          type: array
-          items:
-            type: object
-            properties:
-              service: { type: string }
-              reason: { type: string }
-            required: [service, reason]
-      required: [riskScore, affectedServices]
-    RiskScore:
-      type: integer
-      minimum: 0
-      maximum: 100
-      example: 55
     Team:
       type: object
       properties:
         id: { type: string, example: platform }
         name: { type: string, example: Platform Team }
       required: [id, name]
-    User:
-      type: object
-      properties:
-        id: { type: string, example: user-abc }
-        email: { type: string, format: email, example: teamlead@ripplemark.io }
-        roles:
-          type: array
-          items: { type: string, example: team_lead }
-      required: [id, email, roles]

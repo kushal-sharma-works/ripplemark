@@ -3,6 +3,9 @@ info:
   title: Ripplemark Analysis API
   version: 1.0.0
   description: Impact analysis and simulation APIs.
+  license:
+    name: MIT
+    identifier: MIT
 servers:
   - url: https://api.ripplemark.local/analysis
 security:
@@ -10,6 +13,7 @@ security:
 paths:
   /analysis/impact:
     post:
+      operationId: runImpactAnalysis
       summary: Run impact analysis
       requestBody:
         required: true
@@ -31,6 +35,7 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
   /analysis/impact/async:
     post:
+      operationId: queueImpactAnalysis
       summary: Queue impact analysis
       requestBody:
         required: true
@@ -56,6 +61,7 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
   /analysis/impact/results/{analysisId}:
     get:
+      operationId: getImpactAnalysisResult
       summary: Read queued analysis result
       parameters:
         - in: path
@@ -83,6 +89,7 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
   /simulation/run:
     post:
+      operationId: runWhatIfSimulation
       summary: Run what-if simulation
       requestBody:
         required: true
@@ -114,6 +121,7 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
   /health:
     get:
+      operationId: getAnalysisHealth
       security: []
       summary: Health check
       responses:
@@ -125,6 +133,7 @@ paths:
                 type: object
                 properties:
                   status: { type: string, example: ok }
+        '400': { $ref: '#/components/responses/BadRequest' }
 components:
   securitySchemes:
     bearerAuth:
@@ -169,23 +178,6 @@ components:
         statusCode: { type: integer }
         message: { type: string }
       required: [statusCode, message]
-    ServiceNode:
-      type: object
-      properties:
-        id: { type: string, example: auth-gateway }
-        name: { type: string, example: auth-gateway }
-        type: { type: string, example: api }
-        teamId: { type: string, example: platform }
-        status: { type: string, enum: [healthy, degraded, down], example: healthy }
-        version: { type: string, example: 1.0.0 }
-      required: [id, name, type, teamId, status, version]
-    DependencyEdge:
-      type: object
-      properties:
-        source: { type: string, example: web-app }
-        target: { type: string, example: auth-gateway }
-        type: { type: string, enum: [sync, async], example: sync }
-      required: [source, target, type]
     ChangeProposal:
       type: object
       properties:
@@ -215,18 +207,3 @@ components:
       minimum: 0
       maximum: 100
       example: 73
-    Team:
-      type: object
-      properties:
-        id: { type: string, example: platform }
-        name: { type: string, example: Platform Team }
-      required: [id, name]
-    User:
-      type: object
-      properties:
-        id: { type: string, example: user-123 }
-        email: { type: string, format: email, example: user@ripplemark.io }
-        roles:
-          type: array
-          items: { type: string, example: team_lead }
-      required: [id, email, roles]

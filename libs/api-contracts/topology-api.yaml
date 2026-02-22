@@ -3,6 +3,9 @@ info:
   title: Ripplemark Topology API
   version: 1.0.0
   description: Topology graph ingestion and query APIs.
+  license:
+    name: MIT
+    identifier: MIT
 servers:
   - url: https://api.ripplemark.local/topology
 security:
@@ -10,6 +13,7 @@ security:
 paths:
   /api/v1/graph/nodes:
     get:
+      operationId: listServiceNodes
       summary: List service nodes
       responses:
         '200':
@@ -23,8 +27,10 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
     post:
+      operationId: createServiceNode
       summary: Create node
       requestBody:
         required: true
@@ -42,9 +48,11 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
   /api/v1/graph/edges:
     get:
+      operationId: listDependencyEdges
       summary: List dependency edges
       responses:
         '200':
@@ -55,12 +63,13 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/DependencyEdge'
-              '400': { $ref: '#/components/responses/BadRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-              '403': { $ref: '#/components/responses/Forbidden' }
-              '404': { $ref: '#/components/responses/NotFound' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
     post:
+      operationId: createDependencyEdge
       summary: Create dependency edge
       requestBody:
         required: true
@@ -82,6 +91,7 @@ paths:
         '500': { $ref: '#/components/responses/InternalError' }
   /api/v1/query/path:
     get:
+      operationId: getShortestPath
       summary: Get shortest path between two services
       parameters:
         - in: query
@@ -97,6 +107,10 @@ paths:
           description: Path nodes
           content:
             application/json:
+              examples:
+                default:
+                  value:
+                    path: [web-app, auth-gateway, registry-service]
               schema:
                 type: object
                 properties:
@@ -104,16 +118,14 @@ paths:
                     type: array
                     items: { type: string }
                 required: [path]
-                examples:
-                  default:
-                    value:
-                      path: [web-app, auth-gateway, registry-service]
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
   /health:
     get:
+      operationId: getTopologyHealth
       security: []
       summary: Health check
       responses:
@@ -125,6 +137,7 @@ paths:
                 type: object
                 properties:
                   status: { type: string, enum: [ok] }
+        '400': { $ref: '#/components/responses/BadRequest' }
 components:
   securitySchemes:
     bearerAuth:
@@ -186,44 +199,3 @@ components:
         target: { type: string, example: auth-gateway }
         type: { type: string, enum: [sync, async], example: sync }
       required: [source, target, type]
-    ChangeProposal:
-      type: object
-      properties:
-        serviceId: { type: string, example: auth-gateway }
-        changeType: { type: string, enum: [api, schema, infra, config], example: api }
-        title: { type: string, example: Introduce v2 auth endpoint }
-        description: { type: string, example: Add /auth/v2/login endpoint }
-      required: [serviceId, changeType, title, description]
-    ImpactResult:
-      type: object
-      properties:
-        riskScore: { $ref: '#/components/schemas/RiskScore' }
-        affectedServices:
-          type: array
-          items:
-            type: object
-            properties:
-              service: { type: string, example: web-app }
-              reason: { type: string, example: Depends on changed API contract }
-            required: [service, reason]
-      required: [riskScore, affectedServices]
-    RiskScore:
-      type: integer
-      minimum: 0
-      maximum: 100
-      example: 68
-    Team:
-      type: object
-      properties:
-        id: { type: string, example: platform }
-        name: { type: string, example: Platform Team }
-      required: [id, name]
-    User:
-      type: object
-      properties:
-        id: { type: string, example: user-123 }
-        email: { type: string, format: email, example: user@ripplemark.io }
-        roles:
-          type: array
-          items: { type: string, example: admin }
-      required: [id, email, roles]
